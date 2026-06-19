@@ -64,8 +64,9 @@ final class GestureInputSource implements CanvasInputSource {
           await FilesetResolver.forVisionTasks(_kWasmPath.toJS).toDart;
       if (_disposed) return;
 
+      // GPU delegate conflicts with Flutter's WebGL context; CPU is reliable on web.
       final options = {
-        'baseOptions': {'modelAssetPath': _kModelPath, 'delegate': 'GPU'},
+        'baseOptions': {'modelAssetPath': _kModelPath, 'delegate': 'CPU'},
         'runningMode': 'VIDEO',
         'numHands': 2,
       }.jsify()! as JSObject;
@@ -105,6 +106,7 @@ final class GestureInputSource implements CanvasInputSource {
       _landmarker = null;
       _video?.remove();
       _video = null;
+      if (!_cameraReady.isCompleted) _cameraReady.completeError(e, st);
       onError?.call(e, st);
     }
   }
@@ -140,14 +142,32 @@ final class GestureInputSource implements CanvasInputSource {
       FutureBuilder<void>(
         future: _cameraReady.future,
         builder: (context, snapshot) {
-          final ready = snapshot.connectionState == ConnectionState.done;
-          return SizedBox(
-            width: width,
-            height: height,
-            child: ready
-                ? HtmlElementView(viewType: _previewViewType!)
-                : const ColoredBox(color: Color(0xFF1C1C1E)),
-          );
+          Widget inner;
+          if (snapshot.hasError) {
+            inner = const ColoredBox(
+              color: Color(0xFF2D0000),
+              child: Center(
+                child: Text(
+                  'Camera unavailable.\nCheck console for details.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFFFF6B6B), fontSize: 11),
+                ),
+              ),
+            );
+          } else if (snapshot.connectionState == ConnectionState.done) {
+            inner = HtmlElementView(viewType: _previewViewType!);
+          } else {
+            inner = const ColoredBox(
+              color: Color(0xFF1C1C1E),
+              child: Center(
+                child: Text(
+                  'Starting camera…',
+                  style: TextStyle(color: Color(0xFF888888), fontSize: 11),
+                ),
+              ),
+            );
+          }
+          return SizedBox(width: width, height: height, child: inner);
         },
       );
 

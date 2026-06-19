@@ -40,12 +40,16 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
   Offset? _cursorPosition;
   bool _isDown = false;
   bool _showCamera = false;
+  String? _gestureError;
 
   @override
   void initState() {
     super.initState();
     _gestureSource = GestureInputSource(
-      onError: (e, _) => debugPrint('GestureInputSource error: $e'),
+      onError: (e, st) {
+        debugPrint('GestureInputSource error: $e\n$st');
+        if (mounted) setState(() => _gestureError = e.toString());
+      },
     );
     _controller = CanvasInputController(
       sources: [MouseInputSource(), _gestureSource],
@@ -174,6 +178,51 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
                 onToggle: () => setState(() => _showCamera = !_showCamera),
               ),
             ),
+
+            // Error banner — shown when GestureInputSource.initialize() fails
+            if (_gestureError != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                top: 12,
+                child: Material(
+                  color: const Color(0xFFB71C1C),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Hand tracking error: $_gestureError',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() => _gestureError = null),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white70,
+                            size: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       );
