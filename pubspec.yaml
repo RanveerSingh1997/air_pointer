@@ -1,0 +1,29 @@
+name: air_pointer
+description: >
+  Platform-agnostic canvas input abstraction for Flutter. Ships MouseInputSource
+  and a MediaPipe HandLandmarker GestureInputSource (Flutter Web only), unified
+  behind a clean CanvasInputController boundary.
+version: 0.1.0
+
+repository: https://github.com/RanveerSingh1997/air_pointer
+
+topics:
+  - canvas
+  - gestures
+  - hand-tracking
+  - mediapipe
+
+environment:
+  sdk: ^3.9.2
+  flutter: '>=3.29.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  web: ^1.1.0
+
+dev_dependencies:
+  dart_code_linter: ^3.1.1
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
