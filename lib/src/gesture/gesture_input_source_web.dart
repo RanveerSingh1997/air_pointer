@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:math' as math;
+import 'dart:ui_web' as ui_web;
 
 import 'package:air_pointer/src/boundary/canvas_input_source.dart';
 import 'package:air_pointer/src/events/pointer_input_event.dart';
@@ -34,6 +35,11 @@ final class GestureInputSource implements CanvasInputSource {
 
   HandLandmarker? _landmarker;
   web.HTMLVideoElement? _video;
+  web.HTMLVideoElement? _previewVideo;
+  String? _previewViewType;
+
+  // Completes when the camera stream is live and the preview view is registered.
+  final Completer<void> _cameraReady = Completer<void>();
 
   bool _initialized = false;
   bool _disposed = false;
@@ -90,6 +96,8 @@ final class GestureInputSource implements CanvasInputSource {
       video.srcObject = stream;
       await video.play().toDart;  // must await — autoplay alone is not reliable
       if (_disposed) return;
+
+      _setupPreview(stream);
       web.window.requestAnimationFrame(_detectionLoop.toJS);
     } catch (e, st) {
       _initialized = false;
@@ -100,6 +108,48 @@ final class GestureInputSource implements CanvasInputSource {
       onError?.call(e, st);
     }
   }
+
+  void _setupPreview(web.MediaStream stream) {
+    // Create a separate video element for the visible preview so the hidden
+    // detection video is not disturbed by any style changes.
+    final preview = web.document.createElement('video') as web.HTMLVideoElement
+      ..autoplay = true
+      ..muted = true
+      ..playsInline = true
+      ..srcObject = stream;
+    preview.style
+      ..width = '100%'
+      ..height = '100%'
+      ..transform = 'scaleX(-1)';  // mirror for natural self-view
+    preview.style.setProperty('object-fit', 'cover');
+
+    _previewVideo = preview;
+    _previewViewType = 'air_pointer_camera_${identityHashCode(this)}';
+    ui_web.platformViewRegistry.registerViewFactory(
+      _previewViewType!,
+      (_) => _previewVideo!,
+    );
+    _cameraReady.complete();
+  }
+
+  /// Returns a widget that shows the live camera feed.
+  ///
+  /// Shows a dark placeholder while the camera is initialising. Call
+  /// [initialize] before (or concurrently with) embedding this widget.
+  Widget buildCameraPreview({double? width, double? height}) =>
+      FutureBuilder<void>(
+        future: _cameraReady.future,
+        builder: (context, snapshot) {
+          final ready = snapshot.connectionState == ConnectionState.done;
+          return SizedBox(
+            width: width,
+            height: height,
+            child: ready
+                ? HtmlElementView(viewType: _previewViewType!)
+                : const ColoredBox(color: Color(0xFF1C1C1E)),
+          );
+        },
+      );
 
   void _detectionLoop(JSNumber timestamp) {
     // Hard-stop: dispose() was called or landmarker was torn down.
@@ -189,6 +239,8 @@ final class GestureInputSource implements CanvasInputSource {
     _disposed = true;
     _landmarker?.close();
     _landmarker = null;
+    _previewVideo?.srcObject = null;
+    _previewVideo = null;
     final video = _video;
     if (video != null) {
       final src = video.srcObject;

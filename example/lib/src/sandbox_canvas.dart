@@ -39,6 +39,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
 
   Offset? _cursorPosition;
   bool _isDown = false;
+  bool _showCamera = false;
 
   @override
   void initState() {
@@ -128,6 +129,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
   Widget build(BuildContext context) => _controller.buildSurface(
         child: Stack(
           children: [
+            // Canvas
             ClipRect(
               child: CustomPaint(
                 painter: _BoxesPainter(
@@ -138,6 +140,8 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
                 size: Size.infinite,
               ),
             ),
+
+            // Hand / pointer cursor
             if (_cursorPosition != null)
               Positioned(
                 left: _cursorPosition!.dx - 12,
@@ -146,10 +150,65 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
                   child: _AirCursor(isDown: _isDown),
                 ),
               ),
+
+            // Camera preview — bottom-right corner
+            if (_showCamera)
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _gestureSource.buildCameraPreview(
+                    width: 240,
+                    height: 180,
+                  ),
+                ),
+              ),
+
+            // Camera toggle button — top-right corner
+            Positioned(
+              right: 12,
+              top: 12,
+              child: _CameraToggle(
+                active: _showCamera,
+                onToggle: () => setState(() => _showCamera = !_showCamera),
+              ),
+            ),
           ],
         ),
       );
 }
+
+// ── Camera toggle button ──────────────────────────────────────────────────────
+
+class _CameraToggle extends StatelessWidget {
+  const _CameraToggle({required this.active, required this.onToggle});
+
+  final bool active;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: active
+            ? Colors.white.withValues(alpha: 0.9)
+            : Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onToggle,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              active ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+              size: 20,
+              color: active ? Colors.black87 : Colors.white,
+            ),
+          ),
+        ),
+      );
+}
+
+// ── Air-pointer cursor ────────────────────────────────────────────────────────
 
 class _AirCursor extends StatelessWidget {
   const _AirCursor({required this.isDown});
@@ -171,16 +230,20 @@ class _AirCursorPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final ringPaint = Paint()
-      ..color = (isDown ? Colors.redAccent : Colors.white).withValues(alpha: 0.9)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, 10, ringPaint);
+    final color = isDown ? Colors.redAccent : Colors.white;
+    canvas.drawCircle(
+      center,
+      10,
+      Paint()
+        ..color = color.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
     if (isDown) {
       canvas.drawCircle(
         center,
         4,
-        Paint()..color = Colors.redAccent.withValues(alpha: 0.9),
+        Paint()..color = color.withValues(alpha: 0.9),
       );
     }
   }
@@ -188,6 +251,8 @@ class _AirCursorPainter extends CustomPainter {
   @override
   bool shouldRepaint(_AirCursorPainter old) => old.isDown != isDown;
 }
+
+// ── Canvas painter ────────────────────────────────────────────────────────────
 
 class _BoxesPainter extends CustomPainter {
   const _BoxesPainter({

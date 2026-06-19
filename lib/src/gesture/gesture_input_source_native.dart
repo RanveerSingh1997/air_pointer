@@ -18,4 +18,7 @@ final class GestureInputSource implements CanvasInputSource {
   void updateCanvasSize(Size size) {}
 
   Future<void> initialize() async {}
+
+  Widget buildCameraPreview({double? width, double? height}) =>
+      const SizedBox.shrink();
 }
