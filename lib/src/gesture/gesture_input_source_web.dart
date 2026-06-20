@@ -68,6 +68,18 @@ final class GestureInputSource implements CanvasInputSource {
     if (_initialized || _disposed) return;
     _initialized = true;
 
+    // Fast-fail for insecure context before attempting getUserMedia. Browsers
+    // block camera access on plain HTTP outside localhost.
+    if (!web.window.isSecureContext) {
+      _initialized = false;
+      final err = StateError(
+        'Camera not available — serve the page over HTTPS or localhost.',
+      );
+      if (!_cameraReady.isCompleted) _cameraReady.completeError(err);
+      onError?.call(err, StackTrace.current);
+      return;
+    }
+
     try {
       final video = web.document.createElement('video') as web.HTMLVideoElement
         ..autoplay = true
@@ -115,9 +127,67 @@ final class GestureInputSource implements CanvasInputSource {
       _worker = null;
       _video?.remove();
       _video = null;
-      if (!_cameraReady.isCompleted) _cameraReady.completeError(e, st);
-      onError?.call(e, st);
+      final categorized = _categorizeCameraError(e);
+      if (!_cameraReady.isCompleted) _cameraReady.completeError(categorized, st);
+      onError?.call(categorized, st);
     }
+  }
+
+  /// Maps a raw worker error string to a user-readable message.
+  ///
+  /// The worker sends `String(e)` which includes the JS error class name and
+  /// message, e.g. "TypeError: Failed to fetch https://...".
+  static String _categorizeWorkerError(String rawMsg) {
+    // Network failure loading WASM runtime or .task model from CDN.
+    if (rawMsg.contains('Failed to fetch') || rawMsg.contains('NetworkError')) {
+      return 'MediaPipe model failed to load — check your internet connection '
+          'or CDN reachability, then reload.';
+    }
+    // Content-Security-Policy blocking the WASM/ES module bundle.
+    if (rawMsg.contains('Content-Security-Policy') ||
+        rawMsg.contains("'unsafe-eval'")) {
+      return 'MediaPipe blocked by Content-Security-Policy — add '
+          "'script-src cdn.jsdelivr.net' and 'wasm-unsafe-eval' to your CSP.";
+    }
+    // CORS rejection when serving the worker script from a different origin.
+    if (rawMsg.contains('CORS') || rawMsg.contains('cross-origin')) {
+      return 'hand_tracker_worker.js blocked by CORS — serve it from the same '
+          'origin as index.html.';
+    }
+    return 'MediaPipe initialization failed: $rawMsg';
+  }
+
+  /// Maps a raw JS exception from getUserMedia into a user-readable [StateError].
+  static StateError _categorizeCameraError(Object e) {
+    try {
+      // On web, getUserMedia rejections arrive as JS DOMExceptions.
+      // Avoid `is JSObject` (invalid_runtime_check_with_js_interop_types);
+      // cast to JSObject first, then use the dart:js_interop isA<T>() API.
+      final jsObj = e as JSObject;
+      if (jsObj.isA<web.DOMException>()) {
+        final dom = jsObj as web.DOMException;
+        final message = switch (dom.name) {
+          'NotAllowedError' || 'PermissionDeniedError' =>
+              'Camera permission denied — allow camera access in browser settings '
+                  'and reload the page.',
+          'NotFoundError' || 'DevicesNotFoundError' =>
+              'No camera found — connect a camera and reload.',
+          'NotReadableError' || 'TrackStartError' =>
+              'Camera is in use by another application — close it and try again.',
+          'OverconstrainedError' || 'ConstraintNotSatisfiedError' =>
+              'Camera constraints could not be satisfied.',
+          'SecurityError' =>
+              'Camera blocked — serve the page over HTTPS or localhost.',
+          _ => 'Camera error (${dom.name}): ${dom.message}',
+        };
+        return StateError(message);
+      }
+    } catch (_) {}
+    // TypeError when navigator.mediaDevices is undefined (very old browser or
+    // non-secure context not caught by the isSecureContext guard above).
+    return StateError(
+      'Camera not available — serve the page over HTTPS or localhost.',
+    );
   }
 
   void _onWorkerMessage(web.MessageEvent event) {
@@ -154,6 +224,7 @@ final class GestureInputSource implements CanvasInputSource {
         _prevTimestampMs = tsMs;
 
         // Convert JS-dartified hand arrays to HandLandmarkPoint lists.
+        final handednesses = raw['handednesses'] as List?;
         List<HandLandmarkPoint>? lms;
         List<HandLandmarkPoint>? secondLms;
         if (hands != null) {
@@ -164,6 +235,7 @@ final class GestureInputSource implements CanvasInputSource {
                   (m['x'] as num).toDouble(),
                   (m['y'] as num).toDouble(),
                   (m['z'] as num).toDouble(),
+                  visibility: (m['visibility'] as num?)?.toDouble() ?? 1.0,
                 );
               }).toList();
           if (hands.isNotEmpty) lms = parseHand(hands[0] as List<Object?>);
@@ -188,16 +260,33 @@ final class GestureInputSource implements CanvasInputSource {
             landmarks: result.debug.landmarks,
             secondHandLandmarks: result.debug.secondHandLandmarks,
             isTwoHandActive: result.debug.isTwoHandActive,
+            handedness: _parseHandedness(handednesses, 0),
+            secondHandedness: _parseHandedness(handednesses, 1),
             workerLatencyMs: workerLatencyMs,
             roundTripMs: roundTripMs,
           ));
         }
 
       case 'error':
-        final msg = raw['message'] as String? ?? 'Unknown worker error';
-        debugPrint('[air_pointer] worker init error: $msg');
-        onError?.call(StateError(msg), StackTrace.current);
+        final rawMsg = raw['message'] as String? ?? 'unknown error';
+        debugPrint('[air_pointer] MediaPipe init error: $rawMsg');
+        onError?.call(
+          StateError(_categorizeWorkerError(rawMsg)),
+          StackTrace.current,
+        );
+
+      case 'init_error': // reserved for future typed worker errors
+        break;
     }
+  }
+
+  static Handedness _parseHandedness(List<Object?>? list, int index) {
+    if (list == null || index >= list.length) return Handedness.unknown;
+    return switch ((list[index] as String?)?.toLowerCase()) {
+      'left' => Handedness.left,
+      'right' => Handedness.right,
+      _ => Handedness.unknown,
+    };
   }
 
   void _captureLoop(JSNumber timestamp) {

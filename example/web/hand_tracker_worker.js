@@ -7,7 +7,9 @@
 //   main → worker  { type: 'dispose' }
 //
 //   worker → main  { type: 'ready' }
-//   worker → main  { type: 'landmarks', hands: Array<Array<{x,y,z}>>,
+//   worker → main  { type: 'landmarks',
+//                    hands: Array<Array<{x,y,z,visibility}>>,
+//                    handednesses: Array<'Left'|'Right'|'Unknown'>,
 //                    timestampMs: number, workerLatencyMs: number }
 //   worker → main  { type: 'error', message: string }
 //
@@ -51,16 +53,21 @@ self.onmessage = async (event) => {
     if (!landmarker) {
       frame?.close();
       // Always reply so the main thread's _workerBusy is cleared.
-      self.postMessage({ type: 'landmarks', hands: [], timestampMs, workerLatencyMs: 0 });
+      self.postMessage({ type: 'landmarks', hands: [], handednesses: [], timestampMs, workerLatencyMs: 0 });
       return;
     }
 
     let hands = [];
+    let handednesses = [];
     try {
       const result = landmarker.detectForVideo(frame, timestampMs);
       frame.close();  // free GPU memory immediately after detection
       hands = result.landmarks.map(hand =>
-        hand.map(({ x, y, z }) => ({ x, y, z }))
+        hand.map(({ x, y, z, visibility }) => ({ x, y, z, visibility }))
+      );
+      // handednesses is an array-of-arrays; take the top category per hand.
+      handednesses = (result.handednesses ?? []).map(
+        cats => cats[0]?.categoryName ?? 'Unknown'
       );
     } catch (_) {
       frame?.close();
@@ -70,6 +77,7 @@ self.onmessage = async (event) => {
     self.postMessage({
       type: 'landmarks',
       hands,
+      handednesses,
       timestampMs,
       workerLatencyMs: Date.now() - recvMs,
     });

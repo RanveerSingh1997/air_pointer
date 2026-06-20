@@ -5,6 +5,7 @@ import 'package:air_pointer/src/filter/one_euro_filter.dart';
 import 'package:air_pointer/src/gesture/calibration_result.dart';
 import 'package:air_pointer/src/gesture/gesture_phase.dart';
 import 'package:air_pointer/src/gesture/hand_landmark_point.dart';
+import 'package:air_pointer/src/gesture/hand_landmark_type.dart';
 import 'package:flutter/painting.dart';
 
 /// Pure-Dart gesture state machine for MediaPipe hand landmarks.
@@ -216,8 +217,8 @@ final class HandGestureRecognizer {
     }
 
     // _phase is now guaranteed to be hovering or down.
-    final thumb = landmarks[4];  // thumb tip
-    final index = landmarks[8];  // index tip
+    final thumb = landmarks.getLandmark(HandLandmarkType.thumbTip);
+    final index = landmarks.getLandmark(HandLandmarkType.indexTip);
     final dx = thumb.x - index.x;
     final dy = thumb.y - index.y;
     _lastPinchDistance = math.sqrt(dx * dx + dy * dy);
@@ -280,9 +281,9 @@ final class HandGestureRecognizer {
       _prevSpread = 0;  // marks "first frame" — no scale emitted yet
     }
 
-    // Use wrist (landmark 0) of each hand for stable spread measurement.
-    final w1 = hand1[0];
-    final w2 = hand2[0];
+    // Use wrist of each hand for stable spread measurement.
+    final w1 = hand1.getLandmark(HandLandmarkType.wrist);
+    final w2 = hand2.getLandmark(HandLandmarkType.wrist);
     final spreadDx = w1.x - w2.x;
     final spreadDy = w1.y - w2.y;
     final spread = math.sqrt(spreadDx * spreadDx + spreadDy * spreadDy);

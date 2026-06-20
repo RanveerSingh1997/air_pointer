@@ -7,4 +7,7 @@ export 'package:air_pointer/src/gesture/gesture_calibrator.dart';
 export 'package:air_pointer/src/gesture/gesture_input_source.dart';
 export 'package:air_pointer/src/gesture/gesture_phase.dart';
 export 'package:air_pointer/src/gesture/hand_landmark_point.dart';
+export 'package:air_pointer/src/gesture/hand_landmark_type.dart';
+export 'package:air_pointer/src/gesture/landmark_provider.dart';
+export 'package:air_pointer/src/gesture/recognized_gesture.dart';
 export 'package:air_pointer/src/mouse/mouse_input_source.dart';
