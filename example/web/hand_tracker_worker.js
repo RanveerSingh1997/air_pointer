@@ -1,5 +1,10 @@
-// Module web worker — runs MediaPipe HandLandmarker off the main thread so
-// inference never blocks Flutter's UI rendering.
+// Classic web worker — MediaPipe HandLandmarker runs off the main thread.
+//
+// This file must stay a CLASSIC worker (no type:'module' on the Worker
+// constructor). MediaPipe's Emscripten WASM runtime calls importScripts()
+// internally; that API is only available in classic workers, not module workers.
+// MediaPipe is loaded via dynamic import() instead, which is supported in
+// classic workers since Chrome 80.
 //
 // Protocol (all messages are plain JSON-serialisable objects):
 //   main → worker  { type: 'init',    wasmPath: string, modelPath: string }
@@ -12,22 +17,23 @@
 //                    handednesses: Array<'Left'|'Right'|'Unknown'>,
 //                    timestampMs: number, workerLatencyMs: number }
 //   worker → main  { type: 'error', message: string }
-//
-// The worker always replies to every 'detect' message (with an empty hands
-// array on detection failure) so the main thread's _workerBusy flag is
-// always released.
-
-import { FilesetResolver, HandLandmarker }
-  from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
 
 let landmarker = null;
+let initialized = false;
 
 self.onmessage = async (event) => {
   const { type } = event.data;
 
   // ── init ──────────────────────────────────────────────────────────────────
   if (type === 'init') {
+    if (initialized) return;  // idempotent — ignore duplicate init messages
+    initialized = true;
     try {
+      // Dynamic import() keeps the ESM bundle while allowing importScripts()
+      // to remain available for MediaPipe's WASM sub-worker threads.
+      const { FilesetResolver, HandLandmarker } = await import(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs'
+      );
       const vision = await FilesetResolver.forVisionTasks(event.data.wasmPath);
       landmarker = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {

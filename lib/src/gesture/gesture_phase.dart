@@ -40,6 +40,7 @@ final class GestureDebugInfo {
     this.detectedGesture = RecognizedGesture.none,
     this.secondHandGesture = RecognizedGesture.none,
     this.dwellProgress = 0.0,
+    this.isPointing = false,
     this.workerLatencyMs = 0,
     this.roundTripMs = 0,
   });
@@ -87,6 +88,10 @@ final class GestureDebugInfo {
   /// beyond the deadzone, or when the phase leaves [GesturePhase.hovering].
   /// Always 0.0 when dwell-click is disabled.
   final double dwellProgress;
+
+  /// True while the pointing-finger scroll gesture is active (index extended,
+  /// middle curled). False when scroll is disabled or the gesture is absent.
+  final bool isPointing;
 
   /// Time the web worker spent on inference for this frame (ms), 0 on native.
   final double workerLatencyMs;

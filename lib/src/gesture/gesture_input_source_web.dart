@@ -25,10 +25,14 @@ final class GestureInputSource implements CanvasInputSource {
     this.onError,
     Duration dwellDuration = Duration.zero,
     double dwellRadius = 12.0,
+    bool scrollEnabled = false,
+    double scrollScale = 3.0,
   }) {
     _recognizer = HandGestureRecognizer(
       dwellDuration: dwellDuration,
       dwellRadius: dwellRadius,
+      scrollEnabled: scrollEnabled,
+      scrollScale: scrollScale,
     );
   }
 
@@ -64,6 +68,9 @@ final class GestureInputSource implements CanvasInputSource {
   int _lastSendMs = 0;  // wall-clock ms when the last frame was posted
 
   late final HandGestureRecognizer _recognizer;
+  // Cached JS wrapper — .toJS allocates a new object each call, so caching
+  // prevents one GC-able allocation per rAF tick (60/s in the hot path).
+  late final JSFunction _captureLoopJS = _captureLoop.toJS;
 
   void updateCanvasSize(Size size) => _canvasSize = size;
 
@@ -114,15 +121,24 @@ final class GestureInputSource implements CanvasInputSource {
 
       // Spin up the inference worker. MediaPipe is loaded inside the worker
       // (via its own ES module import) so the main thread stays clean.
-      _worker = web.Worker(
-        'hand_tracker_worker.js'.toJS,
-        web.WorkerOptions(type: 'module'),
-      );
+      // Classic worker (no type:'module') so MediaPipe's WASM runtime can
+      // call importScripts() for its internal sub-worker threads.
+      _worker = web.Worker('hand_tracker_worker.js'.toJS);
       _worker!.onmessage = _onWorkerMessage.toJS;
-      _worker!.onerror = ((web.Event _) {
-        const msg =
-            'hand_tracker_worker.js failed to load or threw an uncaught error.';
-        onError?.call(StateError(msg), StackTrace.current);
+      _worker!.onerror = ((web.Event event) {
+        String detail;
+        if (event.isA<web.ErrorEvent>()) {
+          final err = event as web.ErrorEvent;
+          detail = '${err.message} (${err.filename}:${err.lineno})';
+        } else {
+          detail = 'unknown error';
+        }
+        onError?.call(
+          StateError(
+            'hand_tracker_worker.js failed to load or threw an uncaught error. $detail',
+          ),
+          StackTrace.current,
+        );
       }).toJS;
 
       _worker!.postMessage(
@@ -208,7 +224,7 @@ final class GestureInputSource implements CanvasInputSource {
     switch (type) {
       case 'ready':
         // Worker finished loading MediaPipe — start capturing frames.
-        web.window.requestAnimationFrame(_captureLoop.toJS);
+        web.window.requestAnimationFrame(_captureLoopJS);
 
       case 'landmarks':
         _workerBusy = false;
@@ -272,6 +288,7 @@ final class GestureInputSource implements CanvasInputSource {
             handedness: _parseHandedness(handednesses, 0),
             secondHandedness: _parseHandedness(handednesses, 1),
             dwellProgress: result.debug.dwellProgress,
+            isPointing: result.debug.isPointing,
             workerLatencyMs: workerLatencyMs,
             roundTripMs: roundTripMs,
           ));
@@ -303,7 +320,7 @@ final class GestureInputSource implements CanvasInputSource {
     if (_disposed || _video == null || _worker == null) return;
 
     // Always reschedule first so the loop survives even if we skip this frame.
-    web.window.requestAnimationFrame(_captureLoop.toJS);
+    web.window.requestAnimationFrame(_captureLoopJS);
 
     if (_video!.readyState < 2 || _workerBusy) return;
 

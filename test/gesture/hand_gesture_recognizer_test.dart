@@ -459,4 +459,133 @@ void main() {
       expect(events.whereType<CanvasTapEvent>(), isEmpty);
     });
   });
+
+  group('pointing-finger scroll', () {
+    // Pointing hand: index tip above indexPip (y=0.3 < 0.5), middle tip below
+    // middlePip (y=0.7 > 0.5), thumb open (distance ≈ 0.22 >> 0.08 threshold).
+    List<HandLandmarkPoint> pointing({double indexY = 0.3}) {
+      final lms = List<HandLandmarkPoint>.generate(
+        21,
+        (_) => const HandLandmarkPoint(0.5, 0.5, 0),
+      );
+      lms[4] = const HandLandmarkPoint(0.4, 0.5, 0);  // thumb tip — open
+      lms[8] = HandLandmarkPoint(0.5, indexY, 0);      // index tip — above PIP (extended)
+      lms[12] = const HandLandmarkPoint(0.5, 0.7, 0); // middle tip — below PIP (curled)
+      lms[20] = const HandLandmarkPoint(0.5, 0.7, 0); // pinky tip — below PIP (curled, not gun gesture)
+      return lms;
+    }
+
+    // Confirmed recognizer with scroll enabled.
+    HandGestureRecognizer scrollR() {
+      final r = HandGestureRecognizer(scrollEnabled: true);
+      _run(r, [_open(), _open(), _open()]);
+      assert(r.phase == GesturePhase.hovering);
+      return r;
+    }
+
+    test('no scroll events when scrollEnabled is false', () {
+      final r = _confirmed();  // scrollEnabled defaults to false
+      final events = _run(r, List.filled(10, pointing()));
+      expect(events.whereType<CanvasScrollEvent>(), isEmpty);
+    });
+
+    test('first pointing frame emits hover not scroll', () {
+      final r = scrollR();
+      final result = r.process(
+        landmarks: pointing(),
+        dt: _dt,
+        canvasSize: _size,
+      );
+      expect(result.events, hasLength(1));
+      expect(result.events.first, isA<CanvasHoverEvent>());
+    });
+
+    test('subsequent pointing frames emit CanvasScrollEvent', () {
+      final r = scrollR();
+      _run(r, [pointing()]);  // consume first frame (hover)
+      final events = _run(r, List.filled(5, pointing()));
+      expect(events.whereType<CanvasScrollEvent>(), hasLength(5));
+      expect(events.whereType<CanvasHoverEvent>(), isEmpty);
+    });
+
+    test('scroll delta.dy is positive when finger moves down', () {
+      final r = scrollR();
+      // Settle filter at upper position (indexY=0.2 → canvas y≈120px).
+      // Both positions must stay < indexPip y (0.5) to keep pointing active.
+      _run(r, List.filled(60, pointing(indexY: 0.2)));
+      // Move finger down (indexY=0.4 → canvas y≈240px → dy > 0).
+      final events = _run(r, List.filled(10, pointing(indexY: 0.4)));
+      final scrolls = events.whereType<CanvasScrollEvent>().toList();
+      expect(scrolls, isNotEmpty);
+      expect(scrolls.any((e) => e.delta.dy > 0), isTrue);
+    });
+
+    test('no scroll when middle finger is extended (not pointing)', () {
+      final r = scrollR();
+      _run(r, [pointing()]);  // establish pointing baseline
+      // Switch to open hand (both index and middle extended).
+      final events = _run(r, List.filled(5, _open()));
+      expect(events.whereType<CanvasScrollEvent>(), isEmpty);
+    });
+
+    test('scroll stops during pinch-down and does not resume mid-drag', () {
+      final r = scrollR();
+      _run(r, [pointing()]);          // baseline
+      _run(r, List.filled(5, pointing()));  // scroll active
+      // Pinch: should cancel scroll and emit CanvasDownEvent.
+      final events = _run(r, [_pinch(), ...List.filled(5, _pinch())]);
+      expect(events.whereType<CanvasScrollEvent>(), isEmpty);
+      expect(events.whereType<CanvasDownEvent>(), hasLength(1));
+    });
+
+    test('isPointing debug flag is true while pointing', () {
+      final r = scrollR();
+      r.process(landmarks: pointing(), dt: _dt, canvasSize: _size); // first frame: baseline
+      final result = r.process(
+        landmarks: pointing(),
+        dt: _dt,
+        canvasSize: _size,
+      );
+      expect(result.debug.isPointing, isTrue);
+    });
+
+    test('isPointing debug flag is false when not pointing', () {
+      final r = scrollR();
+      final result = r.process(
+        landmarks: _open(),
+        dt: _dt,
+        canvasSize: _size,
+      );
+      expect(result.debug.isPointing, isFalse);
+    });
+
+    test('isPointing is false when scrollEnabled is false', () {
+      final r = _confirmed();
+      final result = r.process(
+        landmarks: pointing(),
+        dt: _dt,
+        canvasSize: _size,
+      );
+      expect(result.debug.isPointing, isFalse);
+    });
+
+    test('scroll resets on hand exit — no delta jump on re-entry', () {
+      final r = scrollR();
+      // Establish pointing at indexY=0.3 (~180 px screen) for 30 frames.
+      _run(r, List.filled(30, pointing()));
+      // Hand exits — _prevScrollPosition must be cleared.
+      _run(r, [null, null, null, null, null]);
+      // Re-acquire: 2 open-hand frames drive the acquisition counter.
+      _run(r, [_open(), _open()]);
+      // Third acquisition frame is also the first pointing frame at a shifted
+      // position (0.4 vs prior 0.3). Without the reset this would emit a scroll
+      // jump of ~60 px * scrollScale. With the reset it must be a hover baseline.
+      final result = r.process(
+        landmarks: pointing(indexY: 0.4),
+        dt: _dt,
+        canvasSize: _size,
+      );
+      expect(result.events.first, isA<CanvasHoverEvent>());
+    });
+  });
 }

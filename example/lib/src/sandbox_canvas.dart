@@ -6,6 +6,8 @@ import 'package:air_pointer_example/src/calibration_screen.dart';
 import 'package:air_pointer_example/src/draggable_box.dart';
 import 'package:flutter/material.dart';
 
+const kCanvasBackground = Color(0xFF121212);
+
 final _initialBoxes = [
   DraggableBox(
     rect: const Rect.fromLTWH(80, 80, 160, 100),
@@ -44,6 +46,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
   bool _isDown = false;
   GesturePhase _currentPhase = GesturePhase.lost;
   double _dwellProgress = 0.0;
+  bool _isPointing = false;
   bool _showCamera = false;
   bool _showDebug = false;
   GestureDebugInfo? _debugInfo;
@@ -58,6 +61,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
         if (mounted) setState(() => _gestureError = e.toString());
       },
       dwellDuration: const Duration(milliseconds: 800),
+      scrollEnabled: true,
     );
     _controller = CanvasInputController(
       sources: [MouseInputSource(), _gestureSource],
@@ -68,6 +72,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
         setState(() {
           _currentPhase = info.phase;
           _dwellProgress = info.dwellProgress;
+          _isPointing = info.isPointing;
           if (_showDebug) _debugInfo = info;
         });
       }
@@ -202,6 +207,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
                   child: _AirCursor(
                     phase: _effectivePhase(),
                     dwellProgress: _dwellProgress,
+                    isPointing: _isPointing,
                   ),
                 ),
               ),
@@ -402,23 +408,37 @@ class _IconAction extends StatelessWidget {
 // ── Air-pointer cursor ────────────────────────────────────────────────────────
 
 class _AirCursor extends StatelessWidget {
-  const _AirCursor({required this.phase, this.dwellProgress = 0.0});
+  const _AirCursor({
+    required this.phase,
+    this.dwellProgress = 0.0,
+    this.isPointing = false,
+  });
 
   final GesturePhase phase;
   final double dwellProgress;
+  final bool isPointing;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
         size: const Size(24, 24),
-        painter: _AirCursorPainter(phase: phase, dwellProgress: dwellProgress),
+        painter: _AirCursorPainter(
+          phase: phase,
+          dwellProgress: dwellProgress,
+          isPointing: isPointing,
+        ),
       );
 }
 
 class _AirCursorPainter extends CustomPainter {
-  const _AirCursorPainter({required this.phase, this.dwellProgress = 0.0});
+  const _AirCursorPainter({
+    required this.phase,
+    this.dwellProgress = 0.0,
+    this.isPointing = false,
+  });
 
   final GesturePhase phase;
   final double dwellProgress;
+  final bool isPointing;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -427,6 +447,7 @@ class _AirCursorPainter extends CustomPainter {
     final (color, opacity, filled) = switch (phase) {
       GesturePhase.down => (Colors.redAccent, 0.9, true),
       GesturePhase.grace => (Colors.white, 0.35, false),
+      _ when isPointing => (Colors.amberAccent, 0.9, false),
       _ => (Colors.white, 0.85, false),
     };
 
@@ -464,7 +485,9 @@ class _AirCursorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AirCursorPainter old) =>
-      old.phase != phase || old.dwellProgress != dwellProgress;
+      old.phase != phase ||
+      old.dwellProgress != dwellProgress ||
+      old.isPointing != isPointing;
 }
 
 // ── Debug overlay ─────────────────────────────────────────────────────────────
@@ -687,6 +710,11 @@ class _BoxesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = kCanvasBackground,
+    );
+
     canvas
       ..save()
       ..translate(offset.dx, offset.dy)

@@ -14,10 +14,14 @@ final class GestureInputSource implements CanvasInputSource {
     this.landmarkProvider,
     Duration dwellDuration = Duration.zero,
     double dwellRadius = 12.0,
+    bool scrollEnabled = false,
+    double scrollScale = 3.0,
   }) {
     _recognizer = HandGestureRecognizer(
       dwellDuration: dwellDuration,
       dwellRadius: dwellRadius,
+      scrollEnabled: scrollEnabled,
+      scrollScale: scrollScale,
     );
   }
 
@@ -98,6 +102,7 @@ final class GestureInputSource implements CanvasInputSource {
         detectedGesture: frame.detectedGesture,
         secondHandGesture: frame.secondHandGesture,
         dwellProgress: result.debug.dwellProgress,
+        isPointing: result.debug.isPointing,
       ));
     }
   }
