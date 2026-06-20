@@ -6,6 +6,8 @@ import 'package:air_pointer_example/src/calibration_screen.dart';
 import 'package:air_pointer_example/src/draggable_box.dart';
 import 'package:flutter/material.dart';
 
+const kCanvasBackground = Color(0xFF121212);
+
 final _initialBoxes = [
   DraggableBox(
     rect: const Rect.fromLTWH(80, 80, 160, 100),
@@ -708,6 +710,11 @@ class _BoxesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = kCanvasBackground,
+    );
+
     canvas
       ..save()
       ..translate(offset.dx, offset.dy)

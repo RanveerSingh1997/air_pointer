@@ -469,8 +469,9 @@ void main() {
         (_) => const HandLandmarkPoint(0.5, 0.5, 0),
       );
       lms[4] = const HandLandmarkPoint(0.4, 0.5, 0);  // thumb tip — open
-      lms[8] = HandLandmarkPoint(0.5, indexY, 0);      // index tip — above PIP
-      lms[12] = const HandLandmarkPoint(0.5, 0.7, 0); // middle tip — below PIP
+      lms[8] = HandLandmarkPoint(0.5, indexY, 0);      // index tip — above PIP (extended)
+      lms[12] = const HandLandmarkPoint(0.5, 0.7, 0); // middle tip — below PIP (curled)
+      lms[20] = const HandLandmarkPoint(0.5, 0.7, 0); // pinky tip — below PIP (curled, not gun gesture)
       return lms;
     }
 
@@ -539,6 +540,7 @@ void main() {
 
     test('isPointing debug flag is true while pointing', () {
       final r = scrollR();
+      r.process(landmarks: pointing(), dt: _dt, canvasSize: _size); // first frame: baseline
       final result = r.process(
         landmarks: pointing(),
         dt: _dt,
@@ -569,15 +571,17 @@ void main() {
 
     test('scroll resets on hand exit — no delta jump on re-entry', () {
       final r = scrollR();
-      // Establish pointing state at indexY=0.3 (default).
+      // Establish pointing at indexY=0.3 (~180 px screen) for 30 frames.
       _run(r, List.filled(30, pointing()));
-      // Hand exits.
+      // Hand exits — _prevScrollPosition must be cleared.
       _run(r, [null, null, null, null, null]);
-      // Re-acquire at a very different position (indexY=0.8).
-      _run(r, [pointing(indexY: 0.8), pointing(indexY: 0.8), pointing(indexY: 0.8)]);
-      // First pointing frame after re-acquisition must be hover, not a scroll jump.
+      // Re-acquire: 2 open-hand frames drive the acquisition counter.
+      _run(r, [_open(), _open()]);
+      // Third acquisition frame is also the first pointing frame at a shifted
+      // position (0.4 vs prior 0.3). Without the reset this would emit a scroll
+      // jump of ~60 px * scrollScale. With the reset it must be a hover baseline.
       final result = r.process(
-        landmarks: pointing(indexY: 0.8),
+        landmarks: pointing(indexY: 0.4),
         dt: _dt,
         canvasSize: _size,
       );

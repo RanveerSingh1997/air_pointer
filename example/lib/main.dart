@@ -7,9 +7,13 @@ class _App extends StatelessWidget {
   const _App();
 
   @override
-  Widget build(BuildContext context) => const MaterialApp(
+  Widget build(BuildContext context) => MaterialApp(
         title: 'air_pointer example',
         debugShowCheckedModeBanner: false,
-        home: Scaffold(body: SandboxCanvas()),
+        theme: ThemeData.dark(),
+        home: const Scaffold(
+          backgroundColor: kCanvasBackground,
+          body: SandboxCanvas(),
+        ),
       );
 }

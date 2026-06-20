@@ -91,6 +91,7 @@ final class HandGestureRecognizer {
   // Pointing-finger scroll state.
   final bool _scrollEnabled;
   Offset? _prevScrollPosition;  // null = first pointing frame or not pointing
+  bool _isScrollActive = false; // true only after first pointing frame (baseline captured)
 
   GesturePhase _phase = GesturePhase.lost;
   int _acquireCount = 0;
@@ -151,7 +152,7 @@ final class HandGestureRecognizer {
         secondHandLandmarks: secondOk ? secondHandLandmarks : const [],
         isTwoHandActive: _twoHandActive,
         dwellProgress: _dwellProgress,
-        isPointing: _scrollEnabled && _prevScrollPosition != null,
+        isPointing: _scrollEnabled && _isScrollActive,
       ),
     );
   }
@@ -185,6 +186,7 @@ final class HandGestureRecognizer {
     _dwellElapsedS = 0;
     _mustMoveBeforeDwell = false;
     _prevScrollPosition = null;
+    _isScrollActive = false;
     _xFilter.reset();
     _yFilter.reset();
   }
@@ -194,6 +196,7 @@ final class HandGestureRecognizer {
     _dwellElapsedS = 0;
     _mustMoveBeforeDwell = false;
     _prevScrollPosition = null;
+    _isScrollActive = false;
 
     switch (_phase) {
       case GesturePhase.lost:
@@ -273,20 +276,35 @@ final class HandGestureRecognizer {
       smoothY * canvasSize.height,
     );
 
-    // Hovering: check for pointing-finger scroll, then dwell-click.
+    // Hovering: pinch checked first (beats scroll), then pointing scroll, then dwell.
     if (_phase == GesturePhase.hovering) {
-      if (_scrollEnabled && _detectPointing(landmarks)) {
-        // Suppress dwell; reset anchor so dwell starts fresh when pointing ends.
-        _dwellAnchor = position;
+      // Pinch-close takes priority — drag must work even when middle finger is curled.
+      if (!_mustOpenFirst && _lastPinchDistance < _pinchCloseThreshold) {
+        _phase = GesturePhase.down;
+        _lastPosition = position;
         _dwellElapsedS = 0;
         _mustMoveBeforeDwell = false;
+        _prevScrollPosition = null;
+        _isScrollActive = false;
+        return [CanvasDownEvent(position: position)];
+      }
+      if (_scrollEnabled && _detectPointing(landmarks)) {
+        // Suppress dwell accumulation; do NOT clear _mustMoveBeforeDwell so
+        // the post-dwell guard persists across a scroll session.
+        _dwellAnchor = position;
+        _dwellElapsedS = 0;
         final prev = _prevScrollPosition;
         _prevScrollPosition = position;
-        if (prev == null) return [CanvasHoverEvent(position: position)];
-        final dy = (position.dy - prev.dy) * scrollScale;
-        return [CanvasScrollEvent(position: position, delta: Offset(0, dy))];
+        if (prev == null) {
+          // First pointing frame: record baseline, no delta yet.
+          return [CanvasHoverEvent(position: position)];
+        }
+        _isScrollActive = true;
+        final scrollDy = (position.dy - prev.dy) * scrollScale;
+        return [CanvasScrollEvent(position: position, delta: Offset(0, scrollDy))];
       }
       _prevScrollPosition = null;
+      _isScrollActive = false;
       final dwellTap = _checkDwell(position, dt);
       if (dwellTap != null) return [dwellTap];
     } else {
@@ -295,20 +313,10 @@ final class HandGestureRecognizer {
       _dwellElapsedS = 0;
       _mustMoveBeforeDwell = false;
       _prevScrollPosition = null;
+      _isScrollActive = false;
     }
 
-    // Hysteresis: different thresholds prevent chatter near the boundary.
-    // Pinch is blocked by the clutch guard until the hand opens at least once.
-    if (_phase == GesturePhase.hovering &&
-        !_mustOpenFirst &&
-        _lastPinchDistance < _pinchCloseThreshold) {
-      _phase = GesturePhase.down;
-      _lastPosition = position;
-      _dwellElapsedS = 0;
-      _mustMoveBeforeDwell = false;
-      _prevScrollPosition = null;
-      return [CanvasDownEvent(position: position)];
-    }
+    // Hysteresis: pinch-close was handled inside the hovering block above.
     if (_phase == GesturePhase.down &&
         _lastPinchDistance > _pinchOpenThreshold) {
       _phase = GesturePhase.hovering;
@@ -349,6 +357,7 @@ final class HandGestureRecognizer {
       _dwellElapsedS = 0;
       _mustMoveBeforeDwell = false;
       _prevScrollPosition = null;
+      _isScrollActive = false;
     }
 
     // Use wrist of each hand for stable spread measurement.
@@ -425,14 +434,19 @@ final class HandGestureRecognizer {
     return (_dwellElapsedS / _dwellThresholdS).clamp(0.0, 1.0);
   }
 
-  // Returns true when the index finger is extended and the middle finger is
-  // curled — the pointing gesture that activates finger scroll.
+  // Returns true when the index finger is extended and both the middle and pinky
+  // fingers are curled. The pinky check excludes the "gun" gesture (index +
+  // pinky extended), which would otherwise pass a 2-finger check.
   // MediaPipe Y: 0 = top, 1 = bottom. Extended finger tip has lower Y than PIP.
   bool _detectPointing(List<HandLandmarkPoint> landmarks) {
     final indexTip = landmarks.getLandmark(HandLandmarkType.indexTip);
     final indexPip = landmarks.getLandmark(HandLandmarkType.indexPip);
     final middleTip = landmarks.getLandmark(HandLandmarkType.middleTip);
     final middlePip = landmarks.getLandmark(HandLandmarkType.middlePip);
-    return indexTip.y < indexPip.y && middleTip.y > middlePip.y;
+    final pinkyTip = landmarks.getLandmark(HandLandmarkType.pinkyTip);
+    final pinkyPip = landmarks.getLandmark(HandLandmarkType.pinkyPip);
+    return indexTip.y < indexPip.y &&
+        middleTip.y > middlePip.y &&
+        pinkyTip.y > pinkyPip.y;
   }
 }

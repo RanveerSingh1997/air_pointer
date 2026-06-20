@@ -19,12 +19,15 @@
 //   worker → main  { type: 'error', message: string }
 
 let landmarker = null;
+let initialized = false;
 
 self.onmessage = async (event) => {
   const { type } = event.data;
 
   // ── init ──────────────────────────────────────────────────────────────────
   if (type === 'init') {
+    if (initialized) return;  // idempotent — ignore duplicate init messages
+    initialized = true;
     try {
       // Dynamic import() keeps the ESM bundle while allowing importScripts()
       // to remain available for MediaPipe's WASM sub-worker threads.
