@@ -43,6 +43,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
   Offset? _cursorPosition;
   bool _isDown = false;
   GesturePhase _currentPhase = GesturePhase.lost;
+  double _dwellProgress = 0.0;
   bool _showCamera = false;
   bool _showDebug = false;
   GestureDebugInfo? _debugInfo;
@@ -56,6 +57,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
         debugPrint('GestureInputSource error: $e\n$st');
         if (mounted) setState(() => _gestureError = e.toString());
       },
+      dwellDuration: const Duration(milliseconds: 800),
     );
     _controller = CanvasInputController(
       sources: [MouseInputSource(), _gestureSource],
@@ -65,6 +67,7 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
       if (mounted) {
         setState(() {
           _currentPhase = info.phase;
+          _dwellProgress = info.dwellProgress;
           if (_showDebug) _debugInfo = info;
         });
       }
@@ -196,7 +199,10 @@ class _SandboxCanvasState extends State<SandboxCanvas> {
                 left: _cursorPosition!.dx - 12,
                 top: _cursorPosition!.dy - 12,
                 child: IgnorePointer(
-                  child: _AirCursor(phase: _effectivePhase()),
+                  child: _AirCursor(
+                    phase: _effectivePhase(),
+                    dwellProgress: _dwellProgress,
+                  ),
                 ),
               ),
 
@@ -396,21 +402,23 @@ class _IconAction extends StatelessWidget {
 // ── Air-pointer cursor ────────────────────────────────────────────────────────
 
 class _AirCursor extends StatelessWidget {
-  const _AirCursor({required this.phase});
+  const _AirCursor({required this.phase, this.dwellProgress = 0.0});
 
   final GesturePhase phase;
+  final double dwellProgress;
 
   @override
   Widget build(BuildContext context) => CustomPaint(
         size: const Size(24, 24),
-        painter: _AirCursorPainter(phase: phase),
+        painter: _AirCursorPainter(phase: phase, dwellProgress: dwellProgress),
       );
 }
 
 class _AirCursorPainter extends CustomPainter {
-  const _AirCursorPainter({required this.phase});
+  const _AirCursorPainter({required this.phase, this.dwellProgress = 0.0});
 
   final GesturePhase phase;
+  final double dwellProgress;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -437,10 +445,26 @@ class _AirCursorPainter extends CustomPainter {
         Paint()..color = color.withValues(alpha: opacity),
       );
     }
+
+    // Dwell countdown ring: arc sweeps clockwise from 12-o'clock.
+    if (dwellProgress > 0 && phase == GesturePhase.hovering) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: 10),
+        -math.pi / 2,
+        dwellProgress * 2 * math.pi,
+        false,
+        Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.9)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(_AirCursorPainter old) => old.phase != phase;
+  bool shouldRepaint(_AirCursorPainter old) =>
+      old.phase != phase || old.dwellProgress != dwellProgress;
 }
 
 // ── Debug overlay ─────────────────────────────────────────────────────────────

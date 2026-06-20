@@ -12,7 +12,14 @@ final class GestureInputSource implements CanvasInputSource {
   GestureInputSource({
     this.onError,
     this.landmarkProvider,
-  });
+    Duration dwellDuration = Duration.zero,
+    double dwellRadius = 12.0,
+  }) {
+    _recognizer = HandGestureRecognizer(
+      dwellDuration: dwellDuration,
+      dwellRadius: dwellRadius,
+    );
+  }
 
   final void Function(Object, StackTrace)? onError;
 
@@ -33,7 +40,7 @@ final class GestureInputSource implements CanvasInputSource {
 
   Stream<GestureDebugInfo> get debugInfo => _debugController.stream;
 
-  final HandGestureRecognizer _recognizer = HandGestureRecognizer();
+  late final HandGestureRecognizer _recognizer;
 
   Size _canvasSize = Size.zero;
   StreamSubscription<HandDetectionFrame>? _frameSub;
@@ -90,6 +97,7 @@ final class GestureInputSource implements CanvasInputSource {
         secondHandedness: frame.secondHandedness,
         detectedGesture: frame.detectedGesture,
         secondHandGesture: frame.secondHandGesture,
+        dwellProgress: result.debug.dwellProgress,
       ));
     }
   }

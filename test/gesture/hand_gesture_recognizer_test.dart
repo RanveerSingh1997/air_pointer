@@ -360,4 +360,103 @@ void main() {
       expect(events.whereType<CanvasHoverEvent>(), isEmpty);
     });
   });
+
+  group('dwell-click', () {
+    // Build a confirmed recognizer with dwell enabled.
+    HandGestureRecognizer dwellR({
+      Duration duration = const Duration(milliseconds: 600),
+      double radius = 5.0,
+    }) {
+      final r = HandGestureRecognizer(
+        dwellDuration: duration,
+        dwellRadius: radius,
+      );
+      _run(r, [_open(), _open(), _open()]);
+      assert(r.phase == GesturePhase.hovering);
+      return r;
+    }
+
+    // At 30fps, 600ms = 18 frames to accumulate the dwell threshold.
+    const kDwellFrames = 18;
+
+    test('fires CanvasTapEvent after dwellDuration of stillness', () {
+      final r = dwellR();
+      // 3 acquisition frames already ran in _dwellR. The anchor reset to the
+      // first hover position on frame 3. 18 more frames at the same position
+      // accumulate exactly 600ms.
+      final events = _run(r, List.filled(kDwellFrames, _open()));
+      expect(events.whereType<CanvasTapEvent>(), hasLength(1));
+    });
+
+    test('no tap before dwellDuration elapses', () {
+      final r = dwellR();
+      final events = _run(r, List.filled(kDwellFrames - 1, _open()));
+      expect(events.whereType<CanvasTapEvent>(), isEmpty);
+    });
+
+    test('movement beyond radius resets dwell timer', () {
+      final r = dwellR();
+      // Nearly complete a dwell at position A (17 of 18 frames needed).
+      _run(r, List.filled(kDwellFrames - 1, _open()));
+      // Move ~80px to position B — resets timer.
+      _run(r, [_open(indexX: 0.4)]);
+      // Only 5 more frames at B — far short of a full dwell from the reset.
+      final events = _run(r, List.filled(5, _open(indexX: 0.4)));
+      expect(events.whereType<CanvasTapEvent>(), isEmpty);
+    });
+
+    test('dwell does not fire during pinch-down phase', () {
+      final r = dwellR();
+      final events = _run(r, [
+        _pinch(),
+        ...List.filled(kDwellFrames + 10, _pinch()),
+        _open(),
+      ]);
+      expect(events.whereType<CanvasTapEvent>(), isEmpty);
+      expect(events.whereType<CanvasDownEvent>(), hasLength(1));
+      expect(events.whereType<CanvasUpEvent>(), hasLength(1));
+    });
+
+    test('dwellProgress is 0.0 when dwell is disabled', () {
+      final r = _confirmed();  // default dwellDuration = Duration.zero
+      final result = r.process(landmarks: _open(), dt: _dt, canvasSize: _size);
+      expect(result.debug.dwellProgress, 0.0);
+    });
+
+    test('dwellProgress is 0.0 immediately after tap fires', () {
+      final r = dwellR();
+      _run(r, List.filled(kDwellFrames, _open()));
+      // Next frame: mustMoveBeforeDwell=true → progress resets to 0.
+      final result = r.process(landmarks: _open(), dt: _dt, canvasSize: _size);
+      expect(result.debug.dwellProgress, 0.0);
+    });
+
+    test('second tap requires cursor movement after first', () {
+      final r = dwellR();
+      _run(r, List.filled(kDwellFrames, _open()));
+      // Holding still at same position — no second tap.
+      final events1 = _run(r, List.filled(kDwellFrames + 5, _open()));
+      expect(events1.whereType<CanvasTapEvent>(), isEmpty);
+      // Move past radius, then hold still. The OneEuroFilter takes ~20 frames to
+      // converge after an 80px jump, so provide kDwellFrames * 4 frames of margin.
+      final events2 = _run(r, [
+        _open(indexX: 0.4),
+        ...List.filled(kDwellFrames * 4, _open(indexX: 0.4)),
+      ]);
+      expect(events2.whereType<CanvasTapEvent>(), hasLength(1));
+    });
+
+    test('dwell resets when hand exits frame', () {
+      final r = dwellR();
+      // Accumulate half the required dwell.
+      _run(r, List.filled(kDwellFrames ~/ 2, _open()));
+      // Hand exits — dwell elapsed resets to 0.
+      r.process(landmarks: null, dt: _dt, canvasSize: _size);
+      // Re-acquire (3 frames).
+      _run(r, [_open(), _open(), _open()]);
+      // Another half-dwell: total since last reset is well under a full dwell.
+      final events = _run(r, List.filled(kDwellFrames ~/ 2, _open()));
+      expect(events.whereType<CanvasTapEvent>(), isEmpty);
+    });
+  });
 }

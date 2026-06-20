@@ -42,8 +42,11 @@ final class HandGestureRecognizer {
     this.deadzonePx = 3.0,
     double minCutoff = 1.0,
     double beta = 0.05,
+    Duration dwellDuration = Duration.zero,
+    this.dwellRadius = 12.0,
   })  : _pinchCloseThreshold = pinchCloseThreshold,
         _pinchOpenThreshold = pinchOpenThreshold,
+        _dwellThresholdS = dwellDuration.inMicroseconds / 1e6,
         _xFilter = OneEuroFilter(minCutoff: minCutoff, beta: beta),
         _yFilter = OneEuroFilter(minCutoff: minCutoff, beta: beta);
 
@@ -65,8 +68,18 @@ final class HandGestureRecognizer {
   /// Minimum move distance in screen pixels before a drag event is emitted.
   final double deadzonePx;
 
+  /// Cursor must stay within this radius (screen pixels) for the dwell timer
+  /// to accumulate. Moving beyond it resets the timer to zero.
+  final double dwellRadius;
+
   final OneEuroFilter _xFilter;
   final OneEuroFilter _yFilter;
+
+  // Dwell-click state.
+  final double _dwellThresholdS;  // 0 = dwell disabled
+  Offset _dwellAnchor = Offset.zero;
+  double _dwellElapsedS = 0;
+  bool _mustMoveBeforeDwell = false;
 
   GesturePhase _phase = GesturePhase.lost;
   int _acquireCount = 0;
@@ -126,6 +139,7 @@ final class HandGestureRecognizer {
         landmarks: firstOk ? landmarks : const [],
         secondHandLandmarks: secondOk ? secondHandLandmarks : const [],
         isTwoHandActive: _twoHandActive,
+        dwellProgress: _dwellProgress,
       ),
     );
   }
@@ -155,11 +169,18 @@ final class HandGestureRecognizer {
     _twoHandActive = false;
     _prevSpread = 0;
     _prevCentroidScreen = Offset.zero;
+    _dwellAnchor = Offset.zero;
+    _dwellElapsedS = 0;
+    _mustMoveBeforeDwell = false;
     _xFilter.reset();
     _yFilter.reset();
   }
 
   List<PointerInputEvent> _handleNoHand() {
+    // No hand visible — stop any dwell accumulation immediately.
+    _dwellElapsedS = 0;
+    _mustMoveBeforeDwell = false;
+
     switch (_phase) {
       case GesturePhase.lost:
         return const [];
@@ -238,6 +259,17 @@ final class HandGestureRecognizer {
       smoothY * canvasSize.height,
     );
 
+    // Dwell-click: fire a tap when the cursor holds still in hovering phase.
+    if (_phase == GesturePhase.hovering) {
+      final dwellTap = _checkDwell(position, dt);
+      if (dwellTap != null) return [dwellTap];
+    } else {
+      // In down phase: keep anchor current so release-to-hover starts fresh.
+      _dwellAnchor = position;
+      _dwellElapsedS = 0;
+      _mustMoveBeforeDwell = false;
+    }
+
     // Hysteresis: different thresholds prevent chatter near the boundary.
     // Pinch is blocked by the clutch guard until the hand opens at least once.
     if (_phase == GesturePhase.hovering &&
@@ -245,11 +277,17 @@ final class HandGestureRecognizer {
         _lastPinchDistance < _pinchCloseThreshold) {
       _phase = GesturePhase.down;
       _lastPosition = position;
+      _dwellElapsedS = 0;
+      _mustMoveBeforeDwell = false;
       return [CanvasDownEvent(position: position)];
     }
     if (_phase == GesturePhase.down &&
         _lastPinchDistance > _pinchOpenThreshold) {
       _phase = GesturePhase.hovering;
+      // Reset anchor so dwell restarts from the release position.
+      _dwellAnchor = position;
+      _dwellElapsedS = 0;
+      _mustMoveBeforeDwell = false;
       return [CanvasUpEvent(position: _lastPosition)];
     }
     if (_phase == GesturePhase.down) {
@@ -279,6 +317,9 @@ final class HandGestureRecognizer {
       }
       _twoHandActive = true;
       _prevSpread = 0;  // marks "first frame" — no scale emitted yet
+      // Two-hand mode is not hovering; dwell must restart when returning.
+      _dwellElapsedS = 0;
+      _mustMoveBeforeDwell = false;
     }
 
     // Use wrist of each hand for stable spread measurement.
@@ -318,5 +359,40 @@ final class HandGestureRecognizer {
     ));
 
     return events;
+  }
+
+  // Returns a tap event if the cursor has been within [dwellRadius] of its
+  // anchor for [_dwellThresholdS] seconds, otherwise updates dwell state.
+  CanvasTapEvent? _checkDwell(Offset position, double dt) {
+    if (_dwellThresholdS <= 0) return null;
+
+    if (_mustMoveBeforeDwell) {
+      // Waiting for cursor to move away before the next dwell can start.
+      if ((position - _dwellAnchor).distance >= dwellRadius) {
+        _mustMoveBeforeDwell = false;
+        _dwellAnchor = position;
+        _dwellElapsedS = 0;
+      }
+      return null;
+    }
+
+    if ((position - _dwellAnchor).distance >= dwellRadius) {
+      _dwellAnchor = position;
+      _dwellElapsedS = 0;
+      return null;
+    }
+
+    _dwellElapsedS += dt;
+    if (_dwellElapsedS >= _dwellThresholdS) {
+      _dwellElapsedS = 0;
+      _mustMoveBeforeDwell = true;
+      return CanvasTapEvent(position: position);
+    }
+    return null;
+  }
+
+  double get _dwellProgress {
+    if (_dwellThresholdS <= 0 || _mustMoveBeforeDwell) return 0.0;
+    return (_dwellElapsedS / _dwellThresholdS).clamp(0.0, 1.0);
   }
 }

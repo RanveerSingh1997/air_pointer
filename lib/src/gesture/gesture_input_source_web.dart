@@ -21,7 +21,16 @@ const String _kModelPath =
     'hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
 final class GestureInputSource implements CanvasInputSource {
-  GestureInputSource({this.onError});
+  GestureInputSource({
+    this.onError,
+    Duration dwellDuration = Duration.zero,
+    double dwellRadius = 12.0,
+  }) {
+    _recognizer = HandGestureRecognizer(
+      dwellDuration: dwellDuration,
+      dwellRadius: dwellRadius,
+    );
+  }
 
   final void Function(Object, StackTrace)? onError;
 
@@ -54,7 +63,7 @@ final class GestureInputSource implements CanvasInputSource {
   double _prevTimestampMs = 0;
   int _lastSendMs = 0;  // wall-clock ms when the last frame was posted
 
-  final HandGestureRecognizer _recognizer = HandGestureRecognizer();
+  late final HandGestureRecognizer _recognizer;
 
   void updateCanvasSize(Size size) => _canvasSize = size;
 
@@ -262,6 +271,7 @@ final class GestureInputSource implements CanvasInputSource {
             isTwoHandActive: result.debug.isTwoHandActive,
             handedness: _parseHandedness(handednesses, 0),
             secondHandedness: _parseHandedness(handednesses, 1),
+            dwellProgress: result.debug.dwellProgress,
             workerLatencyMs: workerLatencyMs,
             roundTripMs: roundTripMs,
           ));

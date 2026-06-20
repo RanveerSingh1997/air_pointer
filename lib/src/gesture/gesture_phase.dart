@@ -39,6 +39,7 @@ final class GestureDebugInfo {
     this.secondHandedness = Handedness.unknown,
     this.detectedGesture = RecognizedGesture.none,
     this.secondHandGesture = RecognizedGesture.none,
+    this.dwellProgress = 0.0,
     this.workerLatencyMs = 0,
     this.roundTripMs = 0,
   });
@@ -78,6 +79,14 @@ final class GestureDebugInfo {
   /// Discrete gesture classified for the second hand.
   /// [RecognizedGesture.none] when fewer than two hands are detected.
   final RecognizedGesture secondHandGesture;
+
+  /// Dwell-click progress, 0.0–1.0.
+  ///
+  /// Rises from 0.0 to 1.0 as the cursor holds still in [GesturePhase.hovering].
+  /// Resets to 0.0 immediately after a dwell tap fires, when the cursor moves
+  /// beyond the deadzone, or when the phase leaves [GesturePhase.hovering].
+  /// Always 0.0 when dwell-click is disabled.
+  final double dwellProgress;
 
   /// Time the web worker spent on inference for this frame (ms), 0 on native.
   final double workerLatencyMs;
