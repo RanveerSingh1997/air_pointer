@@ -183,7 +183,10 @@ class NetflixCanvas extends StatefulWidget {
 
 class _NetflixCanvasState extends State<NetflixCanvas> {
   late final CanvasInputController _controller;
+  late final GestureInputSource _gestureSource;
   late final StreamSubscription<PointerInputEvent> _sub;
+  StreamSubscription<GestureDebugInfo>? _debugSub;
+  StreamSubscription<HandTrackingStatus>? _statusSub;
 
   double _verticalScroll = 0;
   final _rowScrolls = <int, double>{};
@@ -193,15 +196,40 @@ class _NetflixCanvasState extends State<NetflixCanvas> {
   _Card? _selectedCard;
   Size _size = Size.zero;
 
+  GesturePhase _phase = GesturePhase.lost;
+  bool _showCamera = false;
+
   @override
   void initState() {
     super.initState();
-    _controller = CanvasInputController(sources: [MouseInputSource()]);
+    _gestureSource = GestureInputSource(
+      onError: (e, st) => debugPrint('GestureInputSource error: $e\n$st'),
+      pinchConfirmFrames: 2,
+      dwellDuration: const Duration(milliseconds: 700),
+      dwellRadius: 14.0,
+      scrollEnabled: true,
+    );
+    _controller = CanvasInputController(
+      sources: [MouseInputSource(), _gestureSource],
+    );
     _sub = _controller.events.listen(_onInput);
+    _debugSub = _gestureSource.debugInfo.listen((info) {
+      if (mounted) setState(() => _phase = info.phase);
+    });
+    _statusSub = _gestureSource.statusStream.listen((_) {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _gestureSource.updateCanvasSize(MediaQuery.sizeOf(context));
+    unawaited(_gestureSource.initialize());
   }
 
   @override
   void dispose() {
+    unawaited(_statusSub?.cancel());
+    unawaited(_debugSub?.cancel());
     unawaited(_sub.cancel());
     unawaited(_controller.dispose());
     super.dispose();
@@ -247,8 +275,16 @@ class _NetflixCanvasState extends State<NetflixCanvas> {
           }
         });
 
-      case CanvasDownEvent():
-      case CanvasMoveEvent():
+      // Track cursor position during hand-gesture pinch-drag so the dot
+      // and hover state stay accurate even when not in pointing-scroll mode.
+      case CanvasDownEvent(:final position):
+      case CanvasMoveEvent(:final position):
+        setState(() {
+          _cursorPos = position;
+          _hovered = _hitTest(position);
+          _hoveredFeatured = _isOnFeatured(position);
+        });
+
       case CanvasUpEvent():
       case CanvasCancelEvent():
       case CanvasScaleEvent():
@@ -339,12 +375,61 @@ class _NetflixCanvasState extends State<NetflixCanvas> {
                   ),
                 ),
 
-              // Cursor dot
+              // Camera toggle button — bottom-right corner
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: GestureDetector(
+                  onTap: () => setState(() => _showCamera = !_showCamera),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: _showCamera
+                          ? Colors.white.withValues(alpha: 0.9)
+                          : Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      _showCamera ? Icons.videocam : Icons.videocam_off,
+                      size: 20,
+                      color: _showCamera ? Colors.black : Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Camera preview
+              if (_showCamera)
+                Positioned(
+                  right: 16,
+                  bottom: 68,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: _gestureSource.buildCameraPreview(
+                      width: 220,
+                      height: 165,
+                    ),
+                  ),
+                ),
+
+              // "Move your hand into view" hint
+              if (_showCamera && _phase == GesturePhase.lost)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 250,
+                  child: Center(child: _TrackingHint()),
+                ),
+
+              // Phase-aware cursor dot
               if (_cursorPos != null)
                 Positioned(
                   left: _cursorPos!.dx - 8,
                   top: _cursorPos!.dy - 8,
-                  child: const IgnorePointer(child: _CursorDot()),
+                  child: IgnorePointer(
+                    child: _CursorDot(phase: _phase),
+                  ),
                 ),
             ],
           );
@@ -993,19 +1078,46 @@ class _DetailBtn extends StatelessWidget {
 // ── Cursor dot ────────────────────────────────────────────────────────────────
 
 class _CursorDot extends StatelessWidget {
-  const _CursorDot();
+  const _CursorDot({required this.phase});
+
+  final GesturePhase phase;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, opacity) = switch (phase) {
+      GesturePhase.down => (Colors.redAccent, 0.9),
+      GesturePhase.grace => (Colors.white, 0.3),
+      _ => (Colors.white, 0.85),
+    };
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: opacity),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: opacity * 0.5), blurRadius: 8),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Tracking hint ─────────────────────────────────────────────────────────────
+
+class _TrackingHint extends StatelessWidget {
+  const _TrackingHint();
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 16,
-        height: 16,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: 0.85),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.white.withValues(alpha: 0.4), blurRadius: 8),
-          ],
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Move your hand into view',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
       );
 }
