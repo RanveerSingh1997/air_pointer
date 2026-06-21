@@ -23,6 +23,9 @@ import 'package:flutter/painting.dart';
 ///   accidental drag when the hand enters the frame already pinched.
 /// - **Hysteresis**: pinch closes at [pinchCloseThreshold] and opens at
 ///   [pinchOpenThreshold] to prevent chatter near the threshold.
+/// - **Pinch confirm gate**: requires [pinchConfirmFrames] consecutive frames
+///   below [pinchCloseThreshold] before `CanvasDownEvent` is emitted.
+///   Default 1 (immediate). Raise to 2 to eliminate single-frame noise spikes.
 /// - **Grace window**: [graceFrames] frames without a hand before the session
 ///   is declared lost; the cursor freezes during grace rather than jumping.
 /// - **Cancel on exit**: emits [CanvasCancelEvent] (not [CanvasUpEvent]) when
@@ -40,6 +43,7 @@ final class HandGestureRecognizer {
     this.acquireFrames = 3,
     this.graceFrames = 5,
     this.deadzonePx = 3.0,
+    this.pinchConfirmFrames = 1,
     double minCutoff = 1.0,
     double beta = 0.05,
     Duration dwellDuration = Duration.zero,
@@ -72,6 +76,13 @@ final class HandGestureRecognizer {
 
   /// Minimum move distance in screen pixels before a drag event is emitted.
   final double deadzonePx;
+
+  /// Consecutive frames below [pinchCloseThreshold] required before a drag
+  /// begins. Default 1 (immediate). Set to 2 to suppress single-frame noise
+  /// spikes near the threshold without adding perceptible latency at 30fps.
+  final int pinchConfirmFrames;
+
+  int _pinchConfirmCount = 0;
 
   /// Cursor must stay within this radius (screen pixels) for the dwell timer
   /// to accumulate. Moving beyond it resets the timer to zero.
@@ -183,6 +194,7 @@ final class HandGestureRecognizer {
     _lastPosition = Offset.zero;
     _lastPinchDistance = 1.0;
     _mustOpenFirst = false;
+    _pinchConfirmCount = 0;
     _twoHandActive = false;
     _prevSpread = 0;
     _prevCentroidScreen = Offset.zero;
@@ -202,6 +214,7 @@ final class HandGestureRecognizer {
     _mustMoveBeforeDwell = false;
     _prevScrollPosition = null;
     _isScrollActive = false;
+    _pinchConfirmCount = 0;
 
     switch (_phase) {
       case GesturePhase.lost:
@@ -296,14 +309,21 @@ final class HandGestureRecognizer {
     if (_phase == GesturePhase.hovering) {
       // Pinch-close takes priority — drag must work even when middle finger is curled.
       if (!_mustOpenFirst && _lastPinchDistance < _pinchCloseThreshold) {
-        _phase = GesturePhase.down;
-        _lastPosition = position;
-        _dwellElapsedS = 0;
-        _mustMoveBeforeDwell = false;
-        _prevScrollPosition = null;
-        _isScrollActive = false;
-        return [CanvasDownEvent(position: position)];
+        _pinchConfirmCount++;
+        if (_pinchConfirmCount >= pinchConfirmFrames) {
+          _pinchConfirmCount = 0;
+          _phase = GesturePhase.down;
+          _lastPosition = position;
+          _dwellElapsedS = 0;
+          _mustMoveBeforeDwell = false;
+          _prevScrollPosition = null;
+          _isScrollActive = false;
+          return [CanvasDownEvent(position: position)];
+        }
+        // Still within the confirm window — hover in place.
+        return [CanvasHoverEvent(position: position)];
       }
+      _pinchConfirmCount = 0;
       if (_scrollEnabled && _detectPointing(landmarks)) {
         // Suppress dwell accumulation; do NOT clear _mustMoveBeforeDwell so
         // the post-dwell guard persists across a scroll session.
@@ -330,6 +350,7 @@ final class HandGestureRecognizer {
       _mustMoveBeforeDwell = false;
       _prevScrollPosition = null;
       _isScrollActive = false;
+      _pinchConfirmCount = 0;
     }
 
     // Hysteresis: pinch-close was handled inside the hovering block above.

@@ -70,6 +70,7 @@ class _SandboxCanvasState extends State<SandboxCanvas>
         debugPrint('GestureInputSource error: $e\n$st');
         if (mounted) setState(() => _gestureError = e.toString());
       },
+      pinchConfirmFrames: 2,
       dwellDuration: const Duration(milliseconds: 800),
       scrollEnabled: true,
     );

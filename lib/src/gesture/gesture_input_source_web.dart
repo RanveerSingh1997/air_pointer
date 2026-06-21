@@ -27,6 +27,9 @@ final class GestureInputSource implements CanvasInputSource {
     this.onError,
     this.mediaPipeBaseUrl,
     this.modelAssetUrl,
+    double pinchCloseThreshold = 0.05,
+    double pinchOpenThreshold = 0.08,
+    int pinchConfirmFrames = 1,
     Duration dwellDuration = Duration.zero,
     double dwellRadius = 12.0,
     bool scrollEnabled = false,
@@ -34,6 +37,9 @@ final class GestureInputSource implements CanvasInputSource {
     Duration predictionHorizon = Duration.zero,
   }) {
     _recognizer = HandGestureRecognizer(
+      pinchCloseThreshold: pinchCloseThreshold,
+      pinchOpenThreshold: pinchOpenThreshold,
+      pinchConfirmFrames: pinchConfirmFrames,
       dwellDuration: dwellDuration,
       dwellRadius: dwellRadius,
       scrollEnabled: scrollEnabled,

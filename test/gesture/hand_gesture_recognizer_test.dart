@@ -131,6 +131,108 @@ void main() {
       expect(events.whereType<CanvasUpEvent>(), isEmpty);
       expect(r.phase, GesturePhase.down);
     });
+
+    test('custom tight close threshold (0.03) still triggers on _pinch()', () {
+      final r = HandGestureRecognizer(
+        pinchCloseThreshold: 0.03,
+        pinchOpenThreshold: 0.06,
+      );
+      _run(r, [_open(), _open(), _open()]);
+      // _pinch() has distance 0.02 < 0.03.
+      final events = _run(r, [_pinch()]);
+      expect(events.single, isA<CanvasDownEvent>());
+    });
+
+    test('distance in default zone (0.04) triggers at default threshold but '
+        'not at tighter threshold (0.03)', () {
+      // Distance = 0.04 → thumb at 0.48, index at 0.52.
+      final tightPinch = _hand(thumbX: 0.48, indexX: 0.52);
+
+      // Default close=0.05: 0.04 < 0.05 → triggers.
+      final r1 = HandGestureRecognizer();
+      _run(r1, [_open(), _open(), _open()]);
+      expect(
+        _run(r1, [tightPinch]).whereType<CanvasDownEvent>(),
+        isNotEmpty,
+      );
+
+      // Tight close=0.03: 0.04 > 0.03 → does NOT trigger.
+      final r2 = HandGestureRecognizer(
+        pinchCloseThreshold: 0.03,
+        pinchOpenThreshold: 0.06,
+      );
+      _run(r2, [_open(), _open(), _open()]);
+      expect(
+        _run(r2, [tightPinch]).whereType<CanvasDownEvent>(),
+        isEmpty,
+      );
+    });
+  });
+
+  group('pinchConfirmFrames', () {
+    test('default (1 frame) triggers on the first pinch frame', () {
+      final r = HandGestureRecognizer(); // pinchConfirmFrames defaults to 1
+      _run(r, [_open(), _open(), _open()]);
+      final events = _run(r, [_pinch()]);
+      expect(events.single, isA<CanvasDownEvent>());
+      expect(r.phase, GesturePhase.down);
+    });
+
+    test('confirmFrames=2: first pinch frame emits hover, not down', () {
+      final r = HandGestureRecognizer(pinchConfirmFrames: 2);
+      _run(r, [_open(), _open(), _open()]);
+      final events = _run(r, [_pinch()]);
+      expect(events.whereType<CanvasDownEvent>(), isEmpty);
+      expect(events.whereType<CanvasHoverEvent>(), isNotEmpty);
+      expect(r.phase, GesturePhase.hovering);
+    });
+
+    test('confirmFrames=2: second consecutive pinch frame emits CanvasDownEvent', () {
+      final r = HandGestureRecognizer(pinchConfirmFrames: 2);
+      _run(r, [_open(), _open(), _open()]);
+      _run(r, [_pinch()]);                  // frame 1 — confirm count = 1
+      final events = _run(r, [_pinch()]);   // frame 2 — confirmed
+      expect(events.single, isA<CanvasDownEvent>());
+      expect(r.phase, GesturePhase.down);
+    });
+
+    test('confirm count resets when hand opens between pinch frames', () {
+      final r = HandGestureRecognizer(pinchConfirmFrames: 2);
+      _run(r, [_open(), _open(), _open()]);
+      _run(r, [_pinch()]);   // count = 1
+      _run(r, [_open()]);    // hand opens — count resets to 0
+      final events = _run(r, [_pinch()]);  // count = 1 again, not 2
+      expect(events.whereType<CanvasDownEvent>(), isEmpty);
+      expect(r.phase, GesturePhase.hovering);
+    });
+
+    test('confirm count resets when hand exits and re-acquires', () {
+      final r = HandGestureRecognizer(pinchConfirmFrames: 2);
+      _run(r, [_open(), _open(), _open()]);
+      _run(r, [_pinch()]);            // count = 1
+      _run(r, [null]);                // hand exits — count resets
+      _run(r, [_open(), _open(), _open()]);  // re-acquire
+      final events = _run(r, [_pinch()]);  // count = 1, not 2
+      expect(events.whereType<CanvasDownEvent>(), isEmpty);
+      expect(r.phase, GesturePhase.hovering);
+    });
+
+    test('confirmFrames=3: three consecutive pinch frames required', () {
+      final r = HandGestureRecognizer(pinchConfirmFrames: 3);
+      _run(r, [_open(), _open(), _open()]);
+      expect(
+        _run(r, [_pinch()]).whereType<CanvasDownEvent>(),
+        isEmpty,
+        reason: 'frame 1 of 3',
+      );
+      expect(
+        _run(r, [_pinch()]).whereType<CanvasDownEvent>(),
+        isEmpty,
+        reason: 'frame 2 of 3',
+      );
+      final events = _run(r, [_pinch()]);
+      expect(events.single, isA<CanvasDownEvent>(), reason: 'frame 3 of 3');
+    });
   });
 
   group('drag motion', () {
