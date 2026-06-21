@@ -31,6 +31,10 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
   _Step _step = _Step.waitForHand;
   CalibrationResult? _result;
 
+  // Filter param state — initialised from recognizer defaults.
+  double _minCutoff = 1.0;
+  double _beta = 0.05;
+
   @override
   void initState() {
     super.initState();
@@ -141,6 +145,10 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
 
                 // Action buttons
                 _buildActions(context),
+                const SizedBox(height: 20),
+
+                // Filter tuning
+                _buildFilterSection(),
               ],
             ),
           ),
@@ -184,6 +192,51 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
         ),
     };
   }
+
+  Widget _buildFilterSection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 16),
+          const Text(
+            'Cursor smoothing',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _FilterSlider(
+            label: 'Smoothing',
+            hint: 'Low = smoother, High = more responsive',
+            value: _minCutoff,
+            min: 0.2,
+            max: 5.0,
+            divisions: 48,
+            format: (v) => '${v.toStringAsFixed(1)} Hz',
+            onChanged: (v) {
+              setState(() => _minCutoff = v);
+              widget.source.setFilterParams(minCutoff: v, beta: _beta);
+            },
+          ),
+          const SizedBox(height: 8),
+          _FilterSlider(
+            label: 'Speed adapt',
+            hint: 'Higher = less lag on fast motion',
+            value: _beta,
+            min: 0.0,
+            max: 0.5,
+            divisions: 50,
+            format: (v) => v.toStringAsFixed(2),
+            onChanged: (v) {
+              setState(() => _beta = v);
+              widget.source.setFilterParams(minCutoff: _minCutoff, beta: v);
+            },
+          ),
+        ],
+      );
 
   Widget _buildActions(BuildContext context) {
     if (_step == _Step.done) {
@@ -346,6 +399,76 @@ class _Threshold extends StatelessWidget {
           const SizedBox(height: 2),
           Text(label,
               style: const TextStyle(color: Colors.white38, fontSize: 10)),
+        ],
+      );
+}
+
+// ── Filter parameter slider ───────────────────────────────────────────────────
+
+class _FilterSlider extends StatelessWidget {
+  const _FilterSlider({
+    required this.label,
+    required this.hint,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.format,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String hint;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String Function(double) format;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+              const Spacer(),
+              Text(
+                format(value),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: Colors.white54,
+              inactiveTrackColor: Colors.white12,
+              thumbColor: Colors.white,
+              overlayColor: Colors.white10,
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: onChanged,
+            ),
+          ),
+          Text(
+            hint,
+            style: const TextStyle(color: Colors.white30, fontSize: 10),
+          ),
         ],
       );
 }

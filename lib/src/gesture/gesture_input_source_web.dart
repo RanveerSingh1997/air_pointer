@@ -30,6 +30,8 @@ final class GestureInputSource implements CanvasInputSource {
     double pinchCloseThreshold = 0.05,
     double pinchOpenThreshold = 0.08,
     int pinchConfirmFrames = 1,
+    double minCutoff = 1.0,
+    double beta = 0.05,
     Duration dwellDuration = Duration.zero,
     double dwellRadius = 12.0,
     bool scrollEnabled = false,
@@ -40,6 +42,8 @@ final class GestureInputSource implements CanvasInputSource {
       pinchCloseThreshold: pinchCloseThreshold,
       pinchOpenThreshold: pinchOpenThreshold,
       pinchConfirmFrames: pinchConfirmFrames,
+      minCutoff: minCutoff,
+      beta: beta,
       dwellDuration: dwellDuration,
       dwellRadius: dwellRadius,
       scrollEnabled: scrollEnabled,
@@ -109,6 +113,20 @@ final class GestureInputSource implements CanvasInputSource {
   /// Safe to call at any time; takes effect on the next processed frame.
   void applyCalibration(CalibrationResult result) =>
       _recognizer.setThresholds(result);
+
+  /// Updates the cursor-position smoothing filter.
+  ///
+  /// Safe to call at any time; the filter resets to the new parameters
+  /// immediately. See [HandGestureRecognizer.setFilterParams] for details.
+  void setFilterParams({
+    required double minCutoff,
+    required double beta,
+    Duration predictionHorizon = Duration.zero,
+  }) => _recognizer.setFilterParams(
+        minCutoff: minCutoff,
+        beta: beta,
+        predictionHorizon: predictionHorizon,
+      );
 
   Future<void> initialize() async {
     if (_initialized || _disposed) return;

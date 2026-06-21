@@ -56,6 +56,8 @@ final class HandGestureRecognizer {
         _dwellThresholdS = dwellDuration.inMicroseconds / 1e6,
         _predictionHorizonS = predictionHorizon.inMicroseconds / 1e6,
         _scrollEnabled = scrollEnabled,
+        _minCutoff = minCutoff,
+        _beta = beta,
         _xFilter = OneEuroFilter(minCutoff: minCutoff, beta: beta),
         _yFilter = OneEuroFilter(minCutoff: minCutoff, beta: beta);
 
@@ -64,6 +66,15 @@ final class HandGestureRecognizer {
 
   /// Normalised pinch distance (thumb–index) that opens the pinch.
   double get pinchOpenThreshold => _pinchOpenThreshold;
+
+  /// Current minimum cutoff frequency of the position filter (Hz).
+  double get minCutoff => _minCutoff;
+
+  /// Current speed coefficient of the position filter.
+  double get beta => _beta;
+
+  /// Current prediction horizon in seconds (0 = no prediction).
+  double get predictionHorizonS => _predictionHorizonS;
 
   double _pinchCloseThreshold;
   double _pinchOpenThreshold;
@@ -92,12 +103,14 @@ final class HandGestureRecognizer {
   /// [CanvasScrollEvent] during a pointing-finger scroll gesture.
   final double scrollScale;
 
-  final OneEuroFilter _xFilter;
-  final OneEuroFilter _yFilter;
+  OneEuroFilter _xFilter;
+  OneEuroFilter _yFilter;
+  double _minCutoff;
+  double _beta;
 
   // Dwell-click state.
   final double _dwellThresholdS;  // 0 = dwell disabled
-  final double _predictionHorizonS;  // 0 = prediction disabled
+  double _predictionHorizonS;  // 0 = prediction disabled
   Offset _dwellAnchor = Offset.zero;
   double _dwellElapsedS = 0;
   bool _mustMoveBeforeDwell = false;
@@ -170,6 +183,31 @@ final class HandGestureRecognizer {
         isPointing: _scrollEnabled && _isScrollActive,
       ),
     );
+  }
+
+  /// Replaces the position-smoothing filter with new parameters.
+  ///
+  /// Safe to call at any time; the new filter starts fresh (state is not
+  /// carried over from the old one). The cursor may jump slightly on the next
+  /// frame while the filter settles — for best results call this between
+  /// tracking sessions rather than mid-drag.
+  ///
+  /// - [minCutoff]: base cutoff frequency in Hz (lower = smoother, more lag;
+  ///   higher = more responsive, more jitter when still). Default 1.0.
+  /// - [beta]: speed coefficient (higher = less lag during fast motion at the
+  ///   cost of slightly more jitter). Default 0.05.
+  /// - [predictionHorizon]: how far ahead to project position based on the
+  ///   filter's velocity estimate, to compensate for lag. Default zero.
+  void setFilterParams({
+    required double minCutoff,
+    required double beta,
+    Duration predictionHorizon = Duration.zero,
+  }) {
+    _minCutoff = minCutoff;
+    _beta = beta;
+    _predictionHorizonS = predictionHorizon.inMicroseconds / 1e6;
+    _xFilter = OneEuroFilter(minCutoff: minCutoff, beta: beta);
+    _yFilter = OneEuroFilter(minCutoff: minCutoff, beta: beta);
   }
 
   /// Updates the pinch detection thresholds without resetting tracking state.
