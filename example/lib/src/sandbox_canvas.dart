@@ -8,19 +8,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 
 const kCanvasBackground = Color(0xFF121212);
+const _kGridColor = Color(0xFF2A2A2A);
+const _kGridSpacing = 40.0; // canvas-space pixels between dots
 
 final _initialBoxes = [
   DraggableBox(
     rect: const Rect.fromLTWH(80, 80, 160, 100),
     color: Colors.blue.shade300,
+    label: 'A',
   ),
   DraggableBox(
     rect: const Rect.fromLTWH(320, 200, 160, 100),
     color: Colors.green.shade300,
+    label: 'B',
   ),
   DraggableBox(
     rect: const Rect.fromLTWH(560, 120, 160, 100),
     color: Colors.orange.shade300,
+    label: 'C',
+  ),
+  DraggableBox(
+    rect: const Rect.fromLTWH(160, 340, 160, 100),
+    color: Colors.purple.shade300,
+    label: 'D',
+  ),
+  DraggableBox(
+    rect: const Rect.fromLTWH(440, 320, 160, 100),
+    color: Colors.teal.shade300,
+    label: 'E',
   ),
 ];
 
@@ -325,6 +340,14 @@ class _SandboxCanvasState extends State<SandboxCanvas>
                   ),
                   const SizedBox(width: 8),
                   _IconAction(
+                    icon: Icons.home_rounded,
+                    onTap: () => setState(() {
+                      _canvasOffset = Offset.zero;
+                      _scale = 1.0;
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+                  _IconAction(
                     icon: Icons.tune_rounded,
                     onTap: () => showDialog<void>(
                       context: context,
@@ -335,6 +358,13 @@ class _SandboxCanvasState extends State<SandboxCanvas>
                   ),
                 ],
               ),
+            ),
+
+            // Zoom level badge — bottom-left corner
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: _ZoomBadge(scale: _scale),
             ),
 
             // Error banner — shown when GestureInputSource.initialize() fails
@@ -382,6 +412,31 @@ class _SandboxCanvasState extends State<SandboxCanvas>
                 ),
               ),
           ],
+        ),
+      );
+}
+
+// ── Zoom badge ────────────────────────────────────────────────────────────────
+
+class _ZoomBadge extends StatelessWidget {
+  const _ZoomBadge({required this.scale});
+
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '${(scale * 100).round()}%',
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            fontFamily: 'monospace',
+          ),
         ),
       );
 }
@@ -774,26 +829,78 @@ class _BoxesPainter extends CustomPainter {
       Paint()..color = kCanvasBackground,
     );
 
+    // Dot grid — drawn in screen space so dots stay pixel-crisp at all scales.
+    _paintGrid(canvas, size);
+
     canvas
       ..save()
       ..translate(offset.dx, offset.dy)
       ..scale(scale);
 
     for (final box in boxes) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(box.rect, const Radius.circular(8)),
-        Paint()..color = box.color,
+      final rrect = RRect.fromRectAndRadius(box.rect, const Radius.circular(8));
+
+      // Shadow
+      canvas.drawShadow(
+        Path()..addRRect(rrect),
+        Colors.black,
+        8.0,
+        true,
       );
+
+      // Fill
+      canvas.drawRRect(rrect, Paint()..color = box.color);
+
+      // Subtle top-edge highlight
       canvas.drawRRect(
-        RRect.fromRectAndRadius(box.rect, const Radius.circular(8)),
+        rrect,
         Paint()
-          ..color = box.color.withValues(alpha: 0.6)
+          ..color = Colors.white.withValues(alpha: 0.18)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+          ..strokeWidth = 1.5,
       );
+
+      // Label
+      if (box.label != null) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: box.label,
+            style: TextStyle(
+              color: Colors.black.withValues(alpha: 0.6),
+              fontSize: 28 / scale.clamp(0.5, 2.0),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(
+          canvas,
+          box.rect.center - Offset(tp.width / 2, tp.height / 2),
+        );
+      }
     }
 
     canvas.restore();
+  }
+
+  void _paintGrid(Canvas canvas, Size size) {
+    final dotPaint = Paint()..color = _kGridColor;
+
+    // Compute the first dot position in screen space by snapping the canvas
+    // origin to the nearest grid cell, then offsetting by the canvas transform.
+    final gridScreenSpacing = _kGridSpacing * scale;
+    final startX = offset.dx % gridScreenSpacing;
+    final startY = offset.dy % gridScreenSpacing;
+
+    var x = startX;
+    while (x < size.width) {
+      var y = startY;
+      while (y < size.height) {
+        canvas.drawCircle(Offset(x, y), 1.5, dotPaint);
+        y += gridScreenSpacing;
+      }
+      x += gridScreenSpacing;
+    }
   }
 
   @override
