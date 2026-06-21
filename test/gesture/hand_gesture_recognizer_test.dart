@@ -550,15 +550,29 @@ void main() {
       expect(events2.whereType<CanvasTapEvent>(), hasLength(1));
     });
 
-    test('dwell resets when hand exits frame', () {
+    test('dwell preserved through brief grace window', () {
+      final r = dwellR();
+      // Accumulate 9 of the 18 required frames at the same position.
+      _run(r, List.filled(kDwellFrames ~/ 2, _open()));
+      // One no-hand frame: hovering → grace. Dwell elapsed is NOT reset.
+      r.process(landmarks: null, dt: _dt, canvasSize: _size);
+      // Hand returns within grace → recovers to hovering (no re-acquisition).
+      // Remaining half-dwell plus preserved progress crosses the threshold.
+      final events = _run(r, List.filled(kDwellFrames ~/ 2, _open()));
+      expect(events.whereType<CanvasTapEvent>(), hasLength(1));
+    });
+
+    test('dwell resets on full session loss after grace expires', () {
       final r = dwellR();
       // Accumulate half the required dwell.
       _run(r, List.filled(kDwellFrames ~/ 2, _open()));
-      // Hand exits — dwell elapsed resets to 0.
-      r.process(landmarks: null, dt: _dt, canvasSize: _size);
-      // Re-acquire (3 frames).
+      // graceFrames=5 no-hand frames → grace expires → lost → dwell resets.
+      for (var i = 0; i < 5; i++) {
+        r.process(landmarks: null, dt: _dt, canvasSize: _size);
+      }
+      // Re-acquire (3 frames — back through acquiring since session was lost).
       _run(r, [_open(), _open(), _open()]);
-      // Another half-dwell: total since last reset is well under a full dwell.
+      // Another half-dwell: dwell reset at session loss, so total is only 9/18. No tap.
       final events = _run(r, List.filled(kDwellFrames ~/ 2, _open()));
       expect(events.whereType<CanvasTapEvent>(), isEmpty);
     });

@@ -247,9 +247,6 @@ final class HandGestureRecognizer {
   }
 
   List<PointerInputEvent> _handleNoHand() {
-    // No hand visible — stop any dwell accumulation immediately.
-    _dwellElapsedS = 0;
-    _mustMoveBeforeDwell = false;
     _prevScrollPosition = null;
     _isScrollActive = false;
     _pinchConfirmCount = 0;
@@ -263,27 +260,37 @@ final class HandGestureRecognizer {
         _phase = GesturePhase.lost;
         _xFilter.reset();
         _yFilter.reset();
+        _dwellElapsedS = 0;
+        _mustMoveBeforeDwell = false;
         return const [];
 
       case GesturePhase.hovering:
         _graceCount = 1;
         _phase = GesturePhase.grace;
+        // Dwell progress is preserved through brief occlusions: if the hand
+        // returns within the grace window at the same position, the timer
+        // continues from where it left off. _checkDwell resets it if the
+        // cursor lands outside dwellRadius of the anchor on re-entry.
         return const [];
 
       case GesturePhase.down:
         // Cancel the active drag immediately; freeze in grace until confirmed lost.
         _graceCount = 1;
         _phase = GesturePhase.grace;
+        _dwellElapsedS = 0;
+        _mustMoveBeforeDwell = false;
         return [const CanvasCancelEvent()];
 
       case GesturePhase.grace:
         _graceCount++;
         if (_graceCount >= graceFrames) {
           _phase = GesturePhase.lost;
-          // Reset filters here (not on grace entry) so a within-grace return
-          // resumes smoothly from the last valid filter state.
+          // Reset filters and dwell here (not on grace entry) so a within-grace
+          // return resumes smoothly from the last valid filter/dwell state.
           _xFilter.reset();
           _yFilter.reset();
+          _dwellElapsedS = 0;
+          _mustMoveBeforeDwell = false;
         }
         return const [];
     }
