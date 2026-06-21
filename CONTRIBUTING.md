@@ -54,7 +54,7 @@ Development Setup
 
 Clone the repository:
 
-git clone <repository-url>
+git clone <git@github.com:Ranveer-Singh-Gour/air_pointer.git>
 cd air_pointer
 
 Install dependencies:
