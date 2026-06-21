@@ -851,4 +851,72 @@ void main() {
       expect(scale.rotation.abs(), lessThan(math.pi));
     });
   });
+
+  group('filter params', () {
+    // Extract the hover position from the last CanvasHoverEvent in a frame list.
+    Offset? lastHoverPos(List<PointerInputEvent> events) =>
+        events.whereType<CanvasHoverEvent>().lastOrNull?.position;
+
+    test('higher beta reduces lag on fast cursor movement', () {
+      // beta=0: speed coefficient off — filter is slow to adapt.
+      // beta=0.3: speed-adaptive — much faster response during fast motion.
+      final slow = HandGestureRecognizer(beta: 0.0);
+      final fast = HandGestureRecognizer(beta: 0.3);
+
+      // Confirm both and warm up at left side (indexX=0.1 → screen x ≈ 720).
+      for (final r in [slow, fast]) {
+        _run(r, [_open(), _open(), _open()]);                // acquire
+        _run(r, List.filled(30, _open(indexX: 0.1)));       // converge
+      }
+
+      // Sudden move to right (indexX=0.9 → screen x ≈ 80). Run 5 frames.
+      final slowEvents = _run(slow, List.filled(5, _open(indexX: 0.9)));
+      final fastEvents = _run(fast, List.filled(5, _open(indexX: 0.9)));
+
+      const target = 80.0;  // (1 − 0.9) × 800
+      final slowX = lastHoverPos(slowEvents)?.dx ?? double.infinity;
+      final fastX = lastHoverPos(fastEvents)?.dx ?? double.infinity;
+
+      // Higher-beta filter should be closer to the target after 5 frames.
+      expect(
+        (fastX - target).abs(),
+        lessThan((slowX - target).abs()),
+        reason: 'fast (β=0.3) should converge faster than slow (β=0.0)',
+      );
+    });
+
+    test('setFilterParams takes effect on subsequent frames', () {
+      final r = HandGestureRecognizer(beta: 0.0);
+      _run(r, [_open(), _open(), _open()]);   // acquire
+      _run(r, List.filled(30, _open(indexX: 0.1)));  // converge left
+
+      // Switch to high beta and move right.
+      r.setFilterParams(minCutoff: 1.0, beta: 0.5);
+      final events = _run(r, List.filled(5, _open(indexX: 0.9)));
+
+      // After setFilterParams the recognizer still emits events (not crashed).
+      expect(events.whereType<CanvasHoverEvent>(), isNotEmpty);
+      // Filter has reset — first frame starts fresh and converges quickly.
+      final pos = lastHoverPos(events);
+      expect(pos, isNotNull);
+      expect((pos!.dx - 80.0).abs(), lessThan(200.0));
+    });
+
+    test('setFilterParams getters reflect updated values', () {
+      final r = HandGestureRecognizer();
+      expect(r.minCutoff, 1.0);
+      expect(r.beta, 0.05);
+      expect(r.predictionHorizonS, 0.0);
+
+      r.setFilterParams(
+        minCutoff: 2.5,
+        beta: 0.2,
+        predictionHorizon: const Duration(milliseconds: 40),
+      );
+
+      expect(r.minCutoff, 2.5);
+      expect(r.beta, 0.2);
+      expect(r.predictionHorizonS, closeTo(0.04, 1e-9));
+    });
+  });
 }
