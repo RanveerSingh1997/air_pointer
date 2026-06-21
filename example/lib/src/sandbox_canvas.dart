@@ -127,11 +127,16 @@ class _SandboxCanvasState extends State<SandboxCanvas>
           _scale = (_scale * scaleDelta).clamp(0.25, 4.0);
           _canvasOffset += panDelta;
         });
-      case CanvasScrollEvent(:final delta):
-        _scrollAccum -= delta;
-        if (!(_scrollTicker?.isActive ?? false)) {
-          _prevScrollTick = Duration.zero;
-          _scrollTicker?.start();
+      case CanvasScrollEvent(:final delta, :final isTrackpad):
+        if (isTrackpad) {
+          // OS already provides momentum for trackpad — apply directly.
+          setState(() => _canvasOffset -= delta);
+        } else {
+          _scrollAccum -= delta;
+          if (!(_scrollTicker?.isActive ?? false)) {
+            _prevScrollTick = Duration.zero;
+            _scrollTicker?.start();
+          }
         }
       case CanvasScaleEndEvent():
         break;

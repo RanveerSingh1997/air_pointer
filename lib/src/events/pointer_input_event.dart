@@ -35,10 +35,19 @@ final class CanvasHoverEvent extends PointerInputEvent {
 }
 
 final class CanvasScrollEvent extends PointerInputEvent {
-  const CanvasScrollEvent({required this.position, required this.delta});
+  const CanvasScrollEvent({
+    required this.position,
+    required this.delta,
+    this.isTrackpad = false,
+  });
 
   final Offset position;
   final Offset delta;
+
+  /// True when the scroll originated from a trackpad (e.g. macOS two-finger
+  /// pan). The OS already applies momentum scrolling for trackpad events, so
+  /// consumers should apply the delta directly rather than adding extra inertia.
+  final bool isTrackpad;
 }
 
 final class CanvasScaleEvent extends PointerInputEvent {

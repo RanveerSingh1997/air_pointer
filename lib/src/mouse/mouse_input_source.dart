@@ -1,27 +1,43 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:air_pointer/src/boundary/canvas_input_source.dart';
 import 'package:air_pointer/src/events/pointer_input_event.dart';
 import 'package:flutter/gestures.dart' as flutter_gestures;
 import 'package:flutter/widgets.dart';
 
-// Distance threshold below which a press+release is treated as a tap, not a drag.
-const double _kTapSlop = 10.0;
-
 final class MouseInputSource implements CanvasInputSource {
   MouseInputSource({
     this.behavior = HitTestBehavior.opaque,
+    this.tapSlop = 10.0,
+    this.scrollMultiplier = 1.0,
   }) : _controller = StreamController.broadcast();
 
   final HitTestBehavior behavior;
+
+  /// Maximum displacement (in logical pixels) between press and release that
+  /// is still treated as a tap rather than a drag.
+  final double tapSlop;
+
+  /// Multiplier applied to every [CanvasScrollEvent] delta.
+  ///
+  /// Useful when the canvas has a zoom level and you want scroll speed to
+  /// track it (e.g. `scrollMultiplier: 1.0 / _scale`).
+  final double scrollMultiplier;
+
   final StreamController<PointerInputEvent> _controller;
 
   @override
   Stream<PointerInputEvent> get events => _controller.stream;
 
   @override
-  Widget buildSurface({required Widget child}) =>
-      _MouseSurface(sink: _controller.sink, behavior: behavior, child: child);
+  Widget buildSurface({required Widget child}) => _MouseSurface(
+        sink: _controller.sink,
+        behavior: behavior,
+        tapSlop: tapSlop,
+        scrollMultiplier: scrollMultiplier,
+        child: child,
+      );
 
   @override
   void dispose() => unawaited(_controller.close());
@@ -31,11 +47,15 @@ class _MouseSurface extends StatefulWidget {
   const _MouseSurface({
     required this.sink,
     required this.behavior,
+    required this.tapSlop,
+    required this.scrollMultiplier,
     required this.child,
   });
 
   final EventSink<PointerInputEvent> sink;
   final HitTestBehavior behavior;
+  final double tapSlop;
+  final double scrollMultiplier;
   final Widget child;
 
   @override
@@ -60,9 +80,23 @@ class _MouseSurfaceState extends State<_MouseSurface> {
       _emit(
         CanvasScrollEvent(
           position: e.localPosition,
-          delta: e.scrollDelta,
+          delta: e.scrollDelta * widget.scrollMultiplier,
+          isTrackpad: e.kind == PointerDeviceKind.trackpad,
         ),
       );
+    } else if (e is flutter_gestures.PointerScaleEvent) {
+      // Native trackpad pinch-to-zoom on macOS/iOS Flutter. scale is a
+      // per-event delta (1.05 = 5% zoom in), matching CanvasScaleEvent's
+      // scaleDelta contract. No end event is synthesized — each event is
+      // self-contained, so we emit CanvasScaleEndEvent immediately after.
+      _emit(
+        CanvasScaleEvent(
+          focalPoint: e.localPosition,
+          scaleDelta: e.scale,
+          panDelta: Offset.zero,
+        ),
+      );
+      _emit(const CanvasScaleEndEvent());
     }
   }
 
@@ -114,7 +148,7 @@ class _MouseSurfaceState extends State<_MouseSurface> {
       // registering TapGestureRecognizer (which would compete with
       // ScaleGestureRecognizer in the arena and delay onScaleStart by ~18 px).
       final wasTap =
-          (_dragLastPosition - _downPosition).distance < _kTapSlop;
+          (_dragLastPosition - _downPosition).distance < widget.tapSlop;
       if (wasTap) {
         _emit(CanvasTapEvent(position: _downPosition));
       } else {
