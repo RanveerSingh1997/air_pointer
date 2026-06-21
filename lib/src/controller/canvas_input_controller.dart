@@ -19,7 +19,7 @@ final class CanvasInputController {
     if (activeStream != null) {
       _suppressionSub = activeStream.listen(
         (active) => _suppressed = active,
-        onError: (Object _, StackTrace __) {},
+        onError: (Object _, StackTrace _) {},
       );
     }
     _merge();

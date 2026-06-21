@@ -9,13 +9,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.29.0'
           channel: stable
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -25,3 +28,14 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      - name: Publish dry-run
+        run: flutter pub publish --dry-run
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build example (web)
+        working-directory: example
+        run: flutter build web --no-pub
