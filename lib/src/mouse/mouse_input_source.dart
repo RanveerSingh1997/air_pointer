@@ -175,8 +175,13 @@ class _MouseSurfaceState extends State<_MouseSurface> {
     }
   }
 
-  void _onLongPressStart(LongPressStartDetails details) =>
-      _emit(CanvasLongPressEvent(position: details.localPosition));
+  void _onLongPressStart(LongPressStartDetails details) {
+    if (_hasDragStarted) {
+      _hasDragStarted = false;
+      _emit(const CanvasCancelEvent());
+    }
+    _emit(CanvasLongPressEvent(position: details.localPosition));
+  }
 
   @override
   Widget build(BuildContext context) => Listener(

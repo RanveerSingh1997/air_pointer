@@ -111,6 +111,7 @@ final class GestureInputSource implements CanvasInputSource {
   bool _wasTracking = false;
   bool _hasErrored = false;
   RecognizedGesture _lastGesture = RecognizedGesture.none;
+  RecognizedGesture _lastSecondGesture = RecognizedGesture.none;
 
   // Set while the worker is processing a frame; prevents flooding the worker.
   bool _workerBusy = false;
@@ -154,6 +155,7 @@ final class GestureInputSource implements CanvasInputSource {
     _hasErrored = false;
     _wasTracking = false;
     _lastGesture = RecognizedGesture.none;
+    _lastSecondGesture = RecognizedGesture.none;
     _emitStatus(const HandTrackingInitializing());
 
     // Fast-fail for insecure context before attempting getUserMedia. Browsers
@@ -375,6 +377,13 @@ final class GestureInputSource implements CanvasInputSource {
         }
         _lastGesture = gesture;
 
+        final secondGesture = classifyGesture(secondLms);
+        if (secondGesture != RecognizedGesture.none &&
+            secondGesture != _lastSecondGesture) {
+          _emit(CanvasGestureEvent(gesture: secondGesture));
+        }
+        _lastSecondGesture = secondGesture;
+
         if (!_hasErrored) {
           final nowTracking = result.debug.phase == GesturePhase.hovering ||
               result.debug.phase == GesturePhase.down;
@@ -382,6 +391,8 @@ final class GestureInputSource implements CanvasInputSource {
             _emitStatus(const HandTrackingTracking());
           } else if (_wasTracking && !nowTracking) {
             _emitStatus(const HandTrackingLost());
+            _lastGesture = RecognizedGesture.none;
+            _lastSecondGesture = RecognizedGesture.none;
           }
           _wasTracking = nowTracking;
         }

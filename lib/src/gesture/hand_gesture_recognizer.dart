@@ -81,6 +81,12 @@ final class HandGestureRecognizer {
   /// Current prediction horizon in seconds (0 = no prediction).
   double get predictionHorizonS => _predictionHorizonS;
 
+  /// Long-press duration in seconds (0 = disabled).
+  double get longPressDurationS => _longPressDurationS;
+
+  /// Double-tap detection window in seconds.
+  double get doubleTapWindowS => _doubleTapWindowS;
+
   double _pinchCloseThreshold;
   double _pinchOpenThreshold;
 

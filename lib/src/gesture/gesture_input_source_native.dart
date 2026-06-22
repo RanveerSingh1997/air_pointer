@@ -87,6 +87,7 @@ final class GestureInputSource implements CanvasInputSource {
   bool _hasErrored = false;
   bool _cameraReadyEmitted = false;
   RecognizedGesture _lastGesture = RecognizedGesture.none;
+  RecognizedGesture _lastSecondGesture = RecognizedGesture.none;
 
   @override
   Stream<PointerInputEvent> get events => _controller.stream;
@@ -167,6 +168,15 @@ final class GestureInputSource implements CanvasInputSource {
     }
     _lastGesture = gesture;
 
+    final secondGesture = frame.secondHandGesture;
+    if (secondGesture != RecognizedGesture.none &&
+        secondGesture != _lastSecondGesture) {
+      if (!_controller.isClosed) {
+        _controller.add(CanvasGestureEvent(gesture: secondGesture));
+      }
+    }
+    _lastSecondGesture = secondGesture;
+
     if (!_hasErrored) {
       final nowTracking = result.debug.phase == GesturePhase.hovering ||
           result.debug.phase == GesturePhase.down;
@@ -174,6 +184,8 @@ final class GestureInputSource implements CanvasInputSource {
         _emitStatus(const HandTrackingTracking());
       } else if (_wasTracking && !nowTracking) {
         _emitStatus(const HandTrackingLost());
+        _lastGesture = RecognizedGesture.none;
+        _lastSecondGesture = RecognizedGesture.none;
       }
       _wasTracking = nowTracking;
     }
