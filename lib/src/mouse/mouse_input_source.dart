@@ -69,6 +69,7 @@ class _MouseSurfaceState extends State<_MouseSurface> {
   bool _hasDragStarted = false;
   Offset _dragLastPosition = Offset.zero;
   Offset _downPosition = Offset.zero;
+  DateTime? _lastTapTime;
 
   void _emit(PointerInputEvent event) => widget.sink.add(event);
 
@@ -150,22 +151,52 @@ class _MouseSurfaceState extends State<_MouseSurface> {
       final wasTap =
           (_dragLastPosition - _downPosition).distance < widget.tapSlop;
       if (wasTap) {
+        final now = DateTime.now();
+        final isDouble = _lastTapTime != null &&
+            now.difference(_lastTapTime!) <=
+                const Duration(milliseconds: 300);
         _emit(CanvasTapEvent(position: _downPosition));
+        if (isDouble) {
+          _emit(CanvasDoubleTapEvent(position: _downPosition));
+          _lastTapTime = null;
+        } else {
+          _lastTapTime = now;
+        }
       } else {
+        _lastTapTime = null;
         _emit(CanvasUpEvent(position: _dragLastPosition));
       }
     }
+  }
+
+  void _onPointerCancel(flutter_gestures.PointerCancelEvent e) {
+    _isPinchZooming = false;
+    _lastTapTime = null;
+    if (_hasDragStarted) {
+      _hasDragStarted = false;
+      _emit(const CanvasCancelEvent());
+    }
+  }
+
+  void _onLongPressStart(LongPressStartDetails details) {
+    if (_hasDragStarted) {
+      _hasDragStarted = false;
+      _emit(const CanvasCancelEvent());
+    }
+    _emit(CanvasLongPressEvent(position: details.localPosition));
   }
 
   @override
   Widget build(BuildContext context) => Listener(
         onPointerHover: _onPointerHover,
         onPointerSignal: _onPointerSignal,
+        onPointerCancel: _onPointerCancel,
         child: GestureDetector(
           behavior: widget.behavior,
           onScaleStart: _onScaleStart,
           onScaleUpdate: _onScaleUpdate,
           onScaleEnd: _onScaleEnd,
+          onLongPressStart: _onLongPressStart,
           child: widget.child,
         ),
       );

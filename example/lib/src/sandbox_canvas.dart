@@ -128,9 +128,10 @@ class _SandboxCanvasState extends State<SandboxCanvas>
       case CanvasMoveEvent(:final position):
         setState(() => _cursorPosition = position);
         _continueDrag(_toCanvas(position));
-      case CanvasUpEvent() || CanvasTapEvent():
+      case CanvasUpEvent() || CanvasTapEvent() || CanvasDoubleTapEvent():
         setState(() => _isDown = false);
         _endDrag();
+      case CanvasLongPressEvent():
       case CanvasCancelEvent():
         // Cancel discards the in-progress drag without committing the move.
         setState(() => _isDown = false);
@@ -155,7 +156,9 @@ class _SandboxCanvasState extends State<SandboxCanvas>
         }
       case CanvasScaleEndEvent():
       case CanvasSwipeEvent():
+      case CanvasGestureEvent():
         break;
+
     }
   }
 

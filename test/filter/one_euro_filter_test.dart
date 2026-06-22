@@ -1,4 +1,4 @@
-import 'package:air_pointer/air_pointer.dart';
+import 'package:air_pointer/src/filter/one_euro_filter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

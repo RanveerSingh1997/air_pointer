@@ -1,7 +1,6 @@
 export 'package:air_pointer/src/boundary/canvas_input_source.dart';
 export 'package:air_pointer/src/controller/canvas_input_controller.dart';
 export 'package:air_pointer/src/events/pointer_input_event.dart';
-export 'package:air_pointer/src/filter/one_euro_filter.dart';
 export 'package:air_pointer/src/gesture/calibration_result.dart';
 export 'package:air_pointer/src/gesture/gesture_calibrator.dart';
 export 'package:air_pointer/src/gesture/gesture_classifier.dart';

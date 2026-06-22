@@ -8,7 +8,7 @@
 //
 // Protocol (all messages are plain JSON-serialisable objects):
 //   main → worker  { type: 'init', bundleUrl: string,
-//                    wasmFolderUrl: string, modelUrl: string }
+//                    wasmFolderUrl: string, modelUrl: string, numHands: number }
 //   main → worker  { type: 'detect',  frame: ImageBitmap, timestampMs: number }
 //   main → worker  { type: 'dispose' }
 //
@@ -44,7 +44,7 @@ self.onmessage = async (event) => {
           delegate: 'CPU',  // GPU conflicts with Flutter's WebGL context
         },
         runningMode: 'VIDEO',
-        numHands: 2,
+        numHands: event.data.numHands ?? 2,
       });
       self.postMessage({ type: 'ready' });
     } catch (e) {

@@ -31,24 +31,34 @@ class MyCanvasState extends State<MyCanvas> {
 
   void _onInput(PointerInputEvent event) {
     switch (event) {
+      case CanvasTapEvent(:final position):
+        // resolved tap (no drag)
+      case CanvasDoubleTapEvent(:final position):
+        // second tap within the double-tap window (~300 ms)
+        // always preceded by CanvasTapEvent on the same frame
+      case CanvasLongPressEvent(:final position):
+        // pointer held still beyond the long-press threshold
       case CanvasDownEvent(:final position):
-        // finger/cursor pressed (or pinch started)
+        // drag/pinch started
       case CanvasMoveEvent(:final position):
         // drag in progress
       case CanvasUpEvent(:final position):
         // released — commit the action
       case CanvasCancelEvent():
         // drag interrupted (e.g. hand left the camera mid-drag) — discard it
-      case CanvasTapEvent(:final position):
-        // resolved tap (gesture arena winner, no drag)
       case CanvasHoverEvent(:final position):
         // cursor hovering (no button held)
-      case CanvasScrollEvent(:final position, :final delta):
-        // scroll wheel
+      case CanvasScrollEvent(:final position, :final delta, :final isTrackpad):
+        // scroll wheel or pointing-finger scroll
       case CanvasScaleEvent(:final focalPoint, :final scaleDelta, :final panDelta):
         // pinch-to-zoom (two fingers or two hands)
       case CanvasScaleEndEvent():
         // scale gesture ended
+      case CanvasSwipeEvent(:final direction, :final velocity):
+        // fast directional motion in an open hand
+      case CanvasGestureEvent(:final gesture, :final isSecondHand):
+        // discrete gesture recognised (thumbsUp, victory, etc.)
+        // isSecondHand is true when it came from the second detected hand
     }
   }
 
@@ -65,6 +75,26 @@ class MyCanvasState extends State<MyCanvas> {
   }
 }
 ```
+
+---
+
+## Event type reference
+
+| Type | Fields | Description |
+|---|---|---|
+| `CanvasTapEvent` | `position` | Resolved tap (no drag) |
+| `CanvasDoubleTapEvent` | `position` | Second tap within the double-tap window; always preceded by `CanvasTapEvent` |
+| `CanvasLongPressEvent` | `position` | Pointer held still beyond the long-press threshold |
+| `CanvasDownEvent` | `position` | Drag/pinch started |
+| `CanvasMoveEvent` | `position` | Drag in progress |
+| `CanvasUpEvent` | `position` | Drag ended — commit |
+| `CanvasCancelEvent` | — | Drag aborted — discard |
+| `CanvasHoverEvent` | `position` | Hover (no press) |
+| `CanvasScrollEvent` | `position`, `delta`, `isTrackpad` | Scroll wheel or pointing-finger scroll |
+| `CanvasScaleEvent` | `focalPoint`, `scaleDelta`, `panDelta`, `rotation` | Pinch/spread with optional rotation |
+| `CanvasScaleEndEvent` | — | Scale gesture ended |
+| `CanvasSwipeEvent` | `direction`, `velocity` | Fast directional cursor movement |
+| `CanvasGestureEvent` | `gesture`, `isSecondHand` | Discrete hand gesture (edge-triggered on change) |
 
 ---
 
@@ -90,6 +120,11 @@ Place `hand_tracker_worker.js` (from `example/web/`) next to your
 ```dart
 final _gestureSource = GestureInputSource(
   onError: (e, st) => print('hand tracking: $e'),
+  dwellDuration: const Duration(milliseconds: 700),  // enable dwell-tap
+  doubleTapWindow: const Duration(milliseconds: 300),
+  longPressDuration: const Duration(milliseconds: 1200),
+  scrollEnabled: true,
+  maxHands: 2,  // set to 1 for better performance in single-hand apps
 );
 
 @override
@@ -105,18 +140,76 @@ void didChangeDependencies() {
 
 ### Gesture mapping
 
-| Gesture | Event |
+| Hand gesture | Event |
 |---|---|
 | Open hand, fingertip moves | `CanvasHoverEvent` |
-| Pinch (thumb + index <5 % gap) | `CanvasDownEvent` |
+| Pinch (thumb + index < 5 % gap) | `CanvasDownEvent` |
 | Hold pinch + move | `CanvasMoveEvent` |
 | Release pinch | `CanvasUpEvent` |
 | Hand exits frame mid-drag | `CanvasCancelEvent` (discard, not commit) |
-| Two-hand spread/pinch | `CanvasScaleEvent` |
+| Cursor holds still for `dwellDuration` | `CanvasTapEvent` |
+| Second dwell within `doubleTapWindow` | `CanvasTapEvent` + `CanvasDoubleTapEvent` |
+| Cursor holds still for `longPressDuration` | `CanvasLongPressEvent` |
+| Index finger extended, move up/down | `CanvasScrollEvent` (when `scrollEnabled: true`) |
+| Fast directional motion, open hand | `CanvasSwipeEvent` (when `swipeThreshold > 0`) |
+| Two-hand spread/pinch | `CanvasScaleEvent` with `rotation` |
 | Two hands separate | `CanvasScaleEndEvent` |
+| Recognised discrete gesture | `CanvasGestureEvent` (edge-triggered; `isSecondHand` for the second hand) |
 
 Position is smoothed with a `OneEuroFilter` and the x-axis is mirrored so
 motion feels natural facing the front camera.
+
+### Dwell-tap
+
+Dwell-tap lets users click without a physical button — the cursor fires
+`CanvasTapEvent` after holding still within `dwellRadius` pixels for `dwellDuration`:
+
+```dart
+GestureInputSource(
+  dwellDuration: const Duration(milliseconds: 700),
+  dwellRadius: 12.0,
+)
+```
+
+`GestureDebugInfo.dwellProgress` (0–1) drives a progress ring in the example app.
+Progress is preserved through the grace window so brief occlusions don't reset it.
+
+### Double-tap and long-press
+
+Both `GestureInputSource` and `MouseInputSource` fire the same events:
+
+```dart
+GestureInputSource(
+  dwellDuration: const Duration(milliseconds: 500),
+  doubleTapWindow: const Duration(milliseconds: 300),  // time between two taps
+  longPressDuration: const Duration(milliseconds: 1200),
+)
+
+MouseInputSource()  // double-tap via DateTime gap; long-press via GestureDetector (~500 ms)
+```
+
+`CanvasDoubleTapEvent` is always preceded by `CanvasTapEvent` on the same frame so
+consumers that only handle single tap continue to work.
+
+### Discrete gesture events
+
+`CanvasGestureEvent` fires once when a `RecognizedGesture` value first appears,
+then rearms when the hand is lost so re-entry with the same gesture fires again:
+
+```dart
+case CanvasGestureEvent(:final gesture, :final isSecondHand):
+  if (!isSecondHand) {
+    switch (gesture) {
+      case RecognizedGesture.thumbUp:   _undo();
+      case RecognizedGesture.victory:   _redo();
+      case RecognizedGesture.openPalm:  _showMenu();
+      default: break;
+    }
+  }
+```
+
+Supported values: `thumbUp`, `thumbDown`, `openPalm`, `closedFist`, `victory`,
+`pointingUp`, `iLoveYou`, `none`.
 
 ### Camera preview
 
@@ -130,8 +223,27 @@ camera is ready, and an error card if initialization failed.
 ### Debug overlay
 
 Subscribe to `GestureInputSource.debugInfo` for per-frame `GestureDebugInfo`
-snapshots (phase, pinch distance, landmarks, latency). Use them to build a
-custom debug overlay — the example app (`example/`) has a ready-made one.
+snapshots (phase, pinch distance, dwell progress, landmarks, detected gestures,
+worker latency). Use them to build a custom debug overlay — the example app
+(`example/`) has a ready-made one.
+
+---
+
+## MouseInputSource options
+
+```dart
+MouseInputSource(
+  tapSlop: 10.0,           // max displacement (px) still treated as a tap
+  scrollMultiplier: 1.0,   // scale scroll deltas (e.g. 1/zoomLevel)
+)
+```
+
+`CanvasScrollEvent.isTrackpad` is `true` for macOS/iOS two-finger pan; the OS
+already applies momentum so consumers should skip extra inertia for those events.
+
+Double-tap is detected via a 300 ms gap between tap releases. Long-press uses
+Flutter's `GestureDetector.onLongPressStart` (~500 ms threshold). If a drag was
+in progress when long-press fires, `CanvasCancelEvent` is emitted first.
 
 ---
 
@@ -161,6 +273,41 @@ guided flow.
 
 ---
 
+## Native hand tracking (non-web)
+
+On iOS, Android, macOS, Windows, and Linux the web worker is unavailable.
+Use the `LandmarkProvider` interface to connect any native ML backend:
+
+```dart
+class MyTFLiteProvider implements LandmarkProvider {
+  final _ctrl = StreamController<HandDetectionFrame>.broadcast();
+
+  @override
+  Stream<HandDetectionFrame> get frames => _ctrl.stream;
+
+  void onInferenceResult(List<HandLandmarkPoint> lms) {
+    _ctrl.add(HandDetectionFrame(landmarks: lms));
+  }
+
+  @override
+  Widget buildPreview({double? width, double? height}) => CameraPreview(...);
+
+  @override
+  void dispose() { _ctrl.close(); }
+}
+
+final source = GestureInputSource(
+  landmarkProvider: MyTFLiteProvider(),
+  maxHands: 1,  // query source.maxHands to configure your provider
+  dwellDuration: const Duration(milliseconds: 700),
+);
+```
+
+`HandGestureRecognizer` is the pure-Dart state machine that drives all event
+logic — it is fully unit-testable without a camera or ML model.
+
+---
+
 ## Architecture boundary
 
 The strict invariant: **no `NormalizedLandmark`, `HandLandmarker`, `JSObject`,
@@ -170,50 +317,28 @@ boundary — all sources speak the same type.
 
 ---
 
-## Event type reference
-
-| Type | Fields | Description |
-|---|---|---|
-| `CanvasTapEvent` | `position` | Resolved tap (no drag) |
-| `CanvasDownEvent` | `position` | Drag/pinch started |
-| `CanvasMoveEvent` | `position` | Drag in progress |
-| `CanvasUpEvent` | `position` | Drag ended — commit |
-| `CanvasCancelEvent` | — | Drag aborted — discard |
-| `CanvasHoverEvent` | `position` | Hover (no press) |
-| `CanvasScrollEvent` | `position`, `delta` | Scroll wheel |
-| `CanvasScaleEvent` | `focalPoint`, `scaleDelta`, `panDelta` | Pinch/spread |
-| `CanvasScaleEndEvent` | — | Scale gesture ended |
-
----
-
 ## Known limitations
 
-- **Flutter Web only for gestures.** `GestureInputSource` is a no-op on iOS,
-  Android, macOS, Windows, and Linux. There is no native camera/ML integration.
+- **Flutter Web only for MediaPipe.** `GestureInputSource` requires a
+  `LandmarkProvider` on native platforms. The web implementation is self-contained
+  (MediaPipe via web worker); native requires you to wire up your own ML backend.
 
 - **Requires a secure context.** `getUserMedia` only works on `https://` or
-  `localhost`. Serving over plain `http://` will produce a camera permission
-  error.
-
-- **Single-hand tracking.** MediaPipe HandLandmarker is configured for
-  `numHands: 2` for the two-hand spread gesture, but the pinch/drag pipeline
-  only tracks the first detected hand. Left/right handedness is not
-  distinguished.
+  `localhost`. Serving over plain `http://` will produce a camera permission error.
 
 - **Lighting sensitivity.** Tracking degrades in dim or strongly backlit
   conditions. MediaPipe's model is generally robust across skin tones but
   performance may vary. Run calibration if default thresholds are unreliable.
 
-- **No offline/self-hosted model.** The WASM runtime and `.task` model file
-  are loaded from CDN at runtime. Self-hosting is possible by downloading the
-  assets and updating the paths in `GestureInputSource` — not yet wired as a
-  package option.
+- **No offline/self-hosted model.** The WASM runtime and `.task` model file are
+  loaded from CDN at runtime. Self-hosting is possible by downloading the assets
+  and updating the paths — not yet wired as a package option.
 
-- **First-run CDN latency.** MediaPipe WASM (~4 MB) loads before the first
-  frame is processed. On a cold cache this takes 2–5 seconds. Subsequent page
-  loads use the browser cache.
+- **First-run CDN latency.** MediaPipe WASM (~4 MB) loads before the first frame
+  is processed. On a cold cache this takes 2–5 seconds. Subsequent page loads use
+  the browser cache.
 
-- **`CanvasCancelEvent` has no position.** When a hand exits the frame
-  mid-drag, the last known position is not re-emitted. Consumers that need a
-  "cancel at position" snapshot should cache `_lastPosition` from the preceding
+- **`CanvasCancelEvent` has no position.** When a hand exits the frame mid-drag,
+  the last known position is not re-emitted. Consumers that need a "cancel at
+  position" snapshot should cache `_lastPosition` from the preceding
   `CanvasMoveEvent`.

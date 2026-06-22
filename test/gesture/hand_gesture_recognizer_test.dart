@@ -1092,4 +1092,147 @@ void main() {
       expect(events.whereType<CanvasSwipeEvent>(), isEmpty);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Double-tap
+  // ---------------------------------------------------------------------------
+
+  group('double-tap', () {
+    // Use a short 100ms dwell (3 frames at 30fps) so the second dwell can
+    // complete before the double-tap window closes.
+    void fireDwellAndMove(HandGestureRecognizer r) {
+      // 4 frames × 33ms ≈ 133ms > 100ms dwell threshold → fires first tap.
+      for (var i = 0; i < 4; i++) {
+        r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+      }
+      // Move away to clear _mustMoveBeforeDwell.
+      r.process(landmarks: _open(indexX: 0.8), dt: 1 / 30, canvasSize: _size);
+    }
+
+    test('second dwell within window emits CanvasDoubleTapEvent', () {
+      final r = HandGestureRecognizer(
+        acquireFrames: 1,
+        dwellDuration: const Duration(milliseconds: 100),
+        dwellRadius: 30,
+        doubleTapWindow: const Duration(seconds: 2),
+      );
+      r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size); // acquire
+
+      fireDwellAndMove(r); // first tap
+
+      // Second dwell immediately — well within the 2s window.
+      final events = <PointerInputEvent>[];
+      for (var i = 0; i < 8; i++) {
+        final res = r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+        events.addAll(res.events);
+      }
+
+      expect(events.whereType<CanvasDoubleTapEvent>(), isNotEmpty);
+      expect(events.whereType<CanvasTapEvent>(), isNotEmpty);
+    });
+
+    test('second dwell after window does not emit CanvasDoubleTapEvent', () {
+      // doubleTapWindow = 100ms is shorter than the ~200ms gap that fireDwellAndMove
+      // leaves before the second dwell fires, so no double-tap should fire.
+      final r = HandGestureRecognizer(
+        acquireFrames: 1,
+        dwellDuration: const Duration(milliseconds: 100),
+        dwellRadius: 30,
+        doubleTapWindow: const Duration(milliseconds: 100),
+      );
+      r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size); // acquire
+
+      fireDwellAndMove(r); // first tap (~200ms elapses including the move frame)
+
+      final events = <PointerInputEvent>[];
+      for (var i = 0; i < 8; i++) {
+        final res = r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+        events.addAll(res.events);
+      }
+
+      expect(events.whereType<CanvasDoubleTapEvent>(), isEmpty);
+      expect(events.whereType<CanvasTapEvent>(), isNotEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Long-press
+  // ---------------------------------------------------------------------------
+
+  group('long-press', () {
+    test('long-press fires after longPressDuration', () {
+      final r = HandGestureRecognizer(
+        acquireFrames: 1,
+        longPressDuration: const Duration(milliseconds: 800),
+        dwellRadius: 30,
+      );
+      r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size); // acquire
+
+      // 25 frames × 33ms ≈ 830ms > 800ms.
+      final events = <PointerInputEvent>[];
+      for (var i = 0; i < 25; i++) {
+        final res = r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+        events.addAll(res.events);
+      }
+
+      expect(events.whereType<CanvasLongPressEvent>(), isNotEmpty);
+      expect(events.whereType<CanvasTapEvent>(), isEmpty);
+    });
+
+    test('dwell tap fires before long-press when dwellDuration < longPressDuration', () {
+      final r = HandGestureRecognizer(
+        acquireFrames: 1,
+        dwellDuration: const Duration(milliseconds: 400),
+        longPressDuration: const Duration(milliseconds: 800),
+        dwellRadius: 30,
+      );
+      r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size); // acquire
+
+      // 13 frames × 33ms ≈ 430ms — past dwell (400ms) but before long-press (800ms).
+      final events = <PointerInputEvent>[];
+      for (var i = 0; i < 13; i++) {
+        final res = r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+        events.addAll(res.events);
+      }
+
+      expect(events.whereType<CanvasTapEvent>(), isNotEmpty);
+      expect(events.whereType<CanvasLongPressEvent>(), isEmpty);
+    });
+
+    test('long-press fires before dwell when longPressDuration < dwellDuration', () {
+      final r = HandGestureRecognizer(
+        acquireFrames: 1,
+        dwellDuration: const Duration(milliseconds: 800),
+        longPressDuration: const Duration(milliseconds: 400),
+        dwellRadius: 30,
+      );
+      r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size); // acquire
+
+      // 13 frames ≈ 430ms — past long-press (400ms) but before dwell (800ms).
+      final events = <PointerInputEvent>[];
+      for (var i = 0; i < 13; i++) {
+        final res = r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+        events.addAll(res.events);
+      }
+
+      expect(events.whereType<CanvasLongPressEvent>(), isNotEmpty);
+      expect(events.whereType<CanvasTapEvent>(), isEmpty);
+    });
+
+    test('long-press disabled when longPressDuration is zero', () {
+      final r = HandGestureRecognizer(
+        acquireFrames: 1,
+        dwellRadius: 30,
+      );
+      r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+
+      final events = <PointerInputEvent>[];
+      for (var i = 0; i < 30; i++) {
+        final res = r.process(landmarks: _open(), dt: 1 / 30, canvasSize: _size);
+        events.addAll(res.events);
+      }
+
+      expect(events.whereType<CanvasLongPressEvent>(), isEmpty);
+    });
+  });
 }

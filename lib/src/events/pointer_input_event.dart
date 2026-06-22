@@ -1,3 +1,4 @@
+import 'package:air_pointer/src/gesture/recognized_gesture.dart';
 import 'package:flutter/painting.dart';
 
 sealed class PointerInputEvent {
@@ -6,6 +7,26 @@ sealed class PointerInputEvent {
 
 final class CanvasTapEvent extends PointerInputEvent {
   const CanvasTapEvent({required this.position});
+
+  final Offset position;
+}
+
+/// Emitted when two [CanvasTapEvent]s occur within the double-tap window
+/// (~300 ms by default). Always preceded by a [CanvasTapEvent] on the same
+/// frame so consumers that only handle single-tap still work correctly.
+final class CanvasDoubleTapEvent extends PointerInputEvent {
+  const CanvasDoubleTapEvent({required this.position});
+
+  final Offset position;
+}
+
+/// Emitted when the cursor holds still beyond the long-press threshold.
+///
+/// Fired by [GestureInputSource] when `longPressDuration > Duration.zero`.
+/// Fired by [MouseInputSource] after the pointer is held without movement for
+/// ~500 ms (via [GestureDetector.onLongPressStart]).
+final class CanvasLongPressEvent extends PointerInputEvent {
+  const CanvasLongPressEvent({required this.position});
 
   final Offset position;
 }
@@ -79,6 +100,21 @@ final class CanvasScaleEndEvent extends PointerInputEvent {
 /// committed — consumers should roll back or discard any in-progress change.
 final class CanvasCancelEvent extends PointerInputEvent {
   const CanvasCancelEvent();
+}
+
+/// Emitted when the hand-tracking backend classifies a discrete gesture
+/// (e.g. thumbs-up, victory sign). Only fired by [GestureInputSource] when
+/// the [RecognizedGesture] value is not [RecognizedGesture.none].
+///
+/// The event is emitted once per gesture recognition, not every frame.
+/// Consumers can bind app-specific actions to each gesture value.
+final class CanvasGestureEvent extends PointerInputEvent {
+  const CanvasGestureEvent({required this.gesture, this.isSecondHand = false});
+
+  final RecognizedGesture gesture;
+
+  /// True when the gesture was detected on the secondary (second) hand.
+  final bool isSecondHand;
 }
 
 /// Cardinal direction of a [CanvasSwipeEvent].

@@ -414,6 +414,9 @@ class _NetflixCanvasState extends State<NetflixCanvas>
           }
         });
 
+      case CanvasDoubleTapEvent():
+      case CanvasLongPressEvent():
+      case CanvasGestureEvent():
       case CanvasScaleEvent():
       case CanvasScaleEndEvent():
         break;

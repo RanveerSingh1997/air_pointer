@@ -7,6 +7,7 @@ import 'package:air_pointer/src/gesture/gesture_phase.dart';
 import 'package:air_pointer/src/gesture/hand_gesture_recognizer.dart';
 import 'package:air_pointer/src/gesture/hand_tracking_status.dart';
 import 'package:air_pointer/src/gesture/landmark_provider.dart';
+import 'package:air_pointer/src/gesture/recognized_gesture.dart';
 import 'package:flutter/widgets.dart';
 
 final class GestureInputSource implements CanvasInputSource {
@@ -27,6 +28,9 @@ final class GestureInputSource implements CanvasInputSource {
     double scrollScale = 3.0,
     Duration predictionHorizon = Duration.zero,
     double swipeThreshold = 0.0,
+    Duration longPressDuration = Duration.zero,
+    Duration doubleTapWindow = const Duration(milliseconds: 300),
+    this.maxHands = 2,
   }) {
     _recognizer = HandGestureRecognizer(
       pinchCloseThreshold: pinchCloseThreshold,
@@ -43,10 +47,18 @@ final class GestureInputSource implements CanvasInputSource {
       scrollScale: scrollScale,
       predictionHorizon: predictionHorizon,
       swipeThreshold: swipeThreshold,
+      longPressDuration: longPressDuration,
+      doubleTapWindow: doubleTapWindow,
     );
   }
 
   final void Function(Object, StackTrace)? onError;
+
+  /// Maximum number of hands the backend should detect simultaneously.
+  ///
+  /// Stored so callers can query the configured value and pass it to their
+  /// [LandmarkProvider] implementation (e.g. to configure a native ML model).
+  final int maxHands;
 
   /// Optional native hand-detection backend.
   ///
@@ -80,6 +92,8 @@ final class GestureInputSource implements CanvasInputSource {
   bool _wasTracking = false;
   bool _hasErrored = false;
   bool _cameraReadyEmitted = false;
+  RecognizedGesture _lastGesture = RecognizedGesture.none;
+  RecognizedGesture _lastSecondGesture = RecognizedGesture.none;
 
   @override
   Stream<PointerInputEvent> get events => _controller.stream;
@@ -151,6 +165,26 @@ final class GestureInputSource implements CanvasInputSource {
       if (!_controller.isClosed) _controller.add(e);
     }
 
+    // Emit CanvasGestureEvent on leading edge of each new discrete gesture.
+    final gesture = frame.detectedGesture;
+    if (gesture != RecognizedGesture.none && gesture != _lastGesture) {
+      if (!_controller.isClosed) {
+        _controller.add(CanvasGestureEvent(gesture: gesture));
+      }
+    }
+    _lastGesture = gesture;
+
+    final secondGesture = frame.secondHandGesture;
+    if (secondGesture != RecognizedGesture.none &&
+        secondGesture != _lastSecondGesture) {
+      if (!_controller.isClosed) {
+        _controller.add(
+          CanvasGestureEvent(gesture: secondGesture, isSecondHand: true),
+        );
+      }
+    }
+    _lastSecondGesture = secondGesture;
+
     if (!_hasErrored) {
       final nowTracking = result.debug.phase == GesturePhase.hovering ||
           result.debug.phase == GesturePhase.down;
@@ -158,6 +192,8 @@ final class GestureInputSource implements CanvasInputSource {
         _emitStatus(const HandTrackingTracking());
       } else if (_wasTracking && !nowTracking) {
         _emitStatus(const HandTrackingLost());
+        _lastGesture = RecognizedGesture.none;
+        _lastSecondGesture = RecognizedGesture.none;
       }
       _wasTracking = nowTracking;
     }

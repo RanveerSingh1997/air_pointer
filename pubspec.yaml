@@ -1,6 +1,6 @@
 name: air_pointer
 description: 'Platform-agnostic canvas input for Flutter. Unifies mouse, trackpad, and MediaPipe hand-gesture events behind a single CanvasInputController.'
-version: 0.1.0
+version: 0.2.0
 
 repository: https://github.com/Ranveer-Singh-Gour/air_pointer
 

@@ -10,6 +10,8 @@ void main() {
       final event = makeDown();
       final result = switch (event) {
         CanvasTapEvent() => 'tap',
+        CanvasDoubleTapEvent() => 'doubleTap',
+        CanvasLongPressEvent() => 'longPress',
         CanvasDownEvent() => 'down',
         CanvasMoveEvent() => 'move',
         CanvasUpEvent() => 'up',
@@ -19,6 +21,7 @@ void main() {
         CanvasScaleEndEvent() => 'scaleEnd',
         CanvasCancelEvent() => 'cancel',
         CanvasSwipeEvent() => 'swipe',
+        CanvasGestureEvent() => 'gesture',
       };
       expect(result, 'down');
     });

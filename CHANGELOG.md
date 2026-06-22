@@ -1,3 +1,96 @@
+## 0.2.1
+
+### Bug fixes
+
+- **`MouseInputSource`** — `_lastTapTime` is now cleared in the drag path of
+  `_onScaleEnd` so a tap followed by a quick drag no longer poisons the
+  double-tap window for the next genuine tap.
+- **`MouseInputSource`** — `_onPointerCancel` now resets `_isPinchZooming` and
+  `_lastTapTime` so an OS-interrupted gesture cannot leave the source in
+  pinch-zoom mode (causing the next tap to be swallowed as `CanvasScaleEndEvent`)
+  or produce a spurious `CanvasDoubleTapEvent`.
+- **`HandGestureRecognizer`** — the inter-tap timer (`_timeSinceLastDwellS`)
+  now advances during `GesturePhase.down` (pinch-drag) and pointing-finger
+  scroll so time spent in those phases correctly counts toward the double-tap
+  window.
+- **`HandGestureRecognizer`** — `_timeSinceLastDwellS` is reset to
+  `double.infinity` when grace expires, preventing a stale tap from a previous
+  tracking session from chaining as a double-tap on re-entry.
+- **`HandGestureRecognizer`** — after a `CanvasDoubleTapEvent` fires,
+  `_timeSinceLastDwellS` is reset to `double.infinity` instead of `0`,
+  matching `MouseInputSource` behaviour (a third rapid dwell no longer emits a
+  second double-tap).
+- **`GestureInputSource` (native)** — `maxHands` constructor parameter is now
+  stored as a readable `final int maxHands` field instead of being silently
+  discarded; callers can query it when configuring their `LandmarkProvider`.
+- **`CanvasGestureEvent`** — new `isSecondHand` field (`bool`, default `false`)
+  distinguishes primary-hand gestures from secondary-hand gestures; both
+  `GestureInputSource` backends now set `isSecondHand: true` on secondary-hand
+  emissions.
+- **`GestureInputSource` (web)** — `classifyGesture` is no longer called twice
+  per frame per hand; the already-computed locals are reused when building
+  `GestureDebugInfo`.
+- **`GestureInputSource` (web)** — `recognized_gesture.dart` import sorted to
+  correct alphabetical position (lint: `directives_ordering`).
+
+---
+
+## 0.2.0
+
+### New events
+
+- **`CanvasDoubleTapEvent`** — emitted alongside the second `CanvasTapEvent` when
+  two taps occur within `doubleTapWindow` (default 300 ms). `MouseInputSource`
+  detects it via a DateTime gap between releases; `HandGestureRecognizer` via
+  elapsed time between consecutive dwell taps.
+- **`CanvasLongPressEvent`** — emitted after the pointer (or cursor) holds still
+  for `longPressDuration`. `MouseInputSource` uses `GestureDetector.onLongPressStart`;
+  `HandGestureRecognizer` uses a configurable `longPressDuration` threshold shared
+  with the dwell timer (shorter threshold always wins).
+- **`CanvasGestureEvent(gesture)`** — edge-triggered on each `RecognizedGesture`
+  change (non-none) for both the primary and secondary hand. Fires once when a
+  gesture starts; resets when the hand is lost so the same gesture can fire again
+  on re-entry.
+
+### HandGestureRecognizer
+
+- `longPressDuration` — new constructor param; `Duration.zero` = disabled (default).
+- `doubleTapWindow` — new constructor param controlling the inter-tap interval
+  that qualifies as a double tap (default 300 ms).
+- `longPressDurationS` / `doubleTapWindowS` — public getters for the above.
+- Pointing-finger scroll now emits both horizontal and vertical deltas
+  (`Offset(scrollDx, scrollDy)` instead of `Offset(0, scrollDy)`).
+- `_checkDwell` refactored to `_checkDwellEvents` returning
+  `List<PointerInputEvent>` to support multiple simultaneous events (tap +
+  double-tap).
+
+### MouseInputSource
+
+- **`CanvasCancelEvent`** emitted from `Listener.onPointerCancel` when the OS
+  interrupts an active drag (context menu, window switch, etc.).
+- **`CanvasLongPressEvent`** via `GestureDetector.onLongPressStart`. If a drag
+  was in progress, `CanvasCancelEvent` is emitted first to close it cleanly.
+- **Double-tap** detected via a `DateTime` gap between successive tap releases.
+
+### GestureInputSource
+
+- `longPressDuration` and `doubleTapWindow` forwarded to `HandGestureRecognizer`
+  on both web and native variants.
+- `maxHands` param (default 2) forwarded to the MediaPipe web worker's
+  `numHands` option; set to 1 to improve performance in single-hand apps.
+- `CanvasGestureEvent` emitted for secondary hand gestures in addition to the
+  primary hand.
+- `_lastGesture` resets to `none` when tracking is lost, so the same gesture
+  fires again when the hand re-enters the frame.
+
+### Breaking changes
+
+- `OneEuroFilter` removed from the public barrel export (`air_pointer.dart`).
+  It was an internal smoothing detail; import directly from
+  `package:air_pointer/src/filter/one_euro_filter.dart` if needed.
+
+---
+
 ## 0.1.0
 
 Initial release.
