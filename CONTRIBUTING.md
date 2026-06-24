@@ -50,6 +50,19 @@ Only PointerInputEvent types may cross package boundaries.
 
 ⸻
 
+Development Prerequisites
+
+| Requirement | Minimum |
+|---|---|
+| Dart SDK | 3.9.2 |
+| Flutter SDK | 3.44.0 |
+| Browser (for Web) | Chrome ≥ 88, Firefox ≥ 89, Safari ≥ 15 |
+
+`dart_code_linter` is a dev dependency and is automatically invoked when you run
+`flutter analyze` — no separate installation step is needed.
+
+⸻
+
 Development Setup
 
 Clone the repository:
@@ -85,8 +98,7 @@ lib/
     ├── events/
     ├── mouse/
     ├── gesture/
-    ├── filters/
-    └── calibration/
+    └── filter/
 
 Responsibilities
 
@@ -94,9 +106,8 @@ Module	Responsibility
 controller	Input orchestration
 events	Shared event model
 mouse	Mouse/trackpad/touch support
-gesture	MediaPipe integration
-filters	Signal smoothing
-calibration	User calibration logic
+gesture	MediaPipe integration + calibration
+filter	Signal smoothing (OneEuroFilter)
 
 ⸻
 
