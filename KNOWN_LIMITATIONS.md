@@ -80,8 +80,11 @@ The WASM runtime (~4 MB) and `.task` model (~20 MB) load from
 
 ## Gesture limitations
 
-- **No rotation gesture** — `CanvasScaleEvent` carries `scaleDelta` and
-  `panDelta` but not rotation. Two-hand rotation is not emitted.
+- **Rotation only from hand tracking, not mouse** — `CanvasScaleEvent` carries
+  a `rotation` field (radians, shortest-path delta) that `GestureInputSource`
+  populates during two-hand spread/pinch gestures. `MouseInputSource` always
+  emits `rotation: 0.0` — Flutter's `ScaleGestureRecognizer` does not expose a
+  rotation delta for two-finger trackpad gestures.
 - **No velocity prediction** — the 1€ filter reduces jitter but adds latency.
   A Kalman-based predictor would recover some of that latency but is not
   implemented.

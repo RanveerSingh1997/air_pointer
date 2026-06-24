@@ -247,6 +247,74 @@ in progress when long-press fires, `CanvasCancelEvent` is emitted first.
 
 ---
 
+## Muting a source when another is active
+
+`CanvasInputController` can suppress a source whenever a second source is
+actively delivering events — for example, mute the mouse when the hand tracker
+has a confirmed hand in frame:
+
+```dart
+final _active = StreamController<bool>.broadcast();
+
+_controller = CanvasInputController(
+  sources: [MouseInputSource(), _gestureSource],
+  muteWhenActive: {MouseInputSource()},  // suppress this source …
+  activeStream: _active.stream,          // … while this stream emits true
+);
+
+// Drive it from the statusStream:
+_gestureSource.statusStream.listen((status) {
+  _active.add(status is HandTrackingTracking);
+});
+```
+
+Both `muteWhenActive` and `activeStream` must be provided together or not at all.
+
+---
+
+## Tracking lifecycle (statusStream)
+
+`GestureInputSource.statusStream` emits typed `HandTrackingStatus` states:
+
+```
+initializing → cameraReady → tracking ⇄ lost
+                                       ↘ error (terminal)
+```
+
+```dart
+_gestureSource.statusStream.listen((status) {
+  switch (status) {
+    case HandTrackingInitializing():  // camera + model loading
+    case HandTrackingCameraReady():   // camera live; scanning for hands
+    case HandTrackingTracking():      // hand confirmed in frame
+    case HandTrackingLost():          // hand left the frame
+    case HandTrackingError(:final error):  // unrecoverable — check onError
+  }
+});
+```
+
+`HandTrackingError` is terminal; no further tracking/lost states are emitted
+after it. Listen to `onError` for the underlying `StateError` message.
+
+---
+
+## Runtime filter tuning
+
+Adjust cursor smoothing at any time without reconstructing the source:
+
+```dart
+_gestureSource.setFilterParams(
+  minCutoff: 0.5,   // lower = smoother, more lag (default 1.0)
+  beta: 0.1,        // higher = less lag during fast motion (default 0.05)
+  predictionHorizon: const Duration(milliseconds: 16),  // look-ahead to offset filter lag
+);
+```
+
+Call between tracking sessions for smoothest results — a mid-session call resets
+the filter state and may cause a brief cursor jump on the next frame.
+
+---
+
 ## Per-user calibration
 
 Default thresholds (pinch close = 0.05, open = 0.08) work for most hands in
