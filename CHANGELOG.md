@@ -2,6 +2,23 @@
 
 ### New
 
+- **`StylusInputSource`** — input source for Apple Pencil, Samsung S-Pen, and
+  any `PointerDeviceKind.stylus` / `PointerDeviceKind.invertedStylus` device.
+  Maps pen contact to element-drag canvas events (Down/Move/Up, tap, double-tap,
+  hover, cancel). Filters out mouse/touch/trackpad events so it can be combined
+  with `MouseInputSource` or `TouchInputSource` without duplicates. Exposes an
+  `eraserModeStream` that emits `true` / `false` on eraser-vs-tip mode changes.
+- **`CanvasDownEvent.pressure`** / **`CanvasMoveEvent.pressure`** (`double`,
+  default `1.0`) — hardware pen pressure (0.0–1.0) carried by stylus down and
+  move events. Backwards-compatible: non-stylus sources emit `1.0`; existing
+  construction and pattern-matching compiles unchanged.
+- **`defaultPointerSource()`** — factory function that returns the best-fit
+  `CanvasInputSource` for the current platform: `TouchInputSource` on Android /
+  iOS, `MouseInputSource` everywhere else (including web). Uses `kIsWeb` and
+  `defaultTargetPlatform` from `package:flutter/foundation.dart`, so it is safe
+  to call on web without conditional imports. `GestureInputSource` is not
+  included — it requires platform-specific configuration that cannot be inferred
+  automatically.
 - **`TouchInputSource`** — mobile-native input source for Android and iOS.
   Single-finger drag → `CanvasScrollEvent` (direct-manipulation pan); two-finger
   pinch/spread → `CanvasScaleEvent`; fling → `CanvasScrollEvent` with non-zero

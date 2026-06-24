@@ -32,15 +32,23 @@ final class CanvasLongPressEvent extends PointerInputEvent {
 }
 
 final class CanvasDownEvent extends PointerInputEvent {
-  const CanvasDownEvent({required this.position});
+  const CanvasDownEvent({required this.position, this.pressure = 1.0});
 
   final Offset position;
+
+  /// Pen/stylus contact pressure in the range 0.0–1.0.
+  /// Always 1.0 for mouse and touch events.
+  final double pressure;
 }
 
 final class CanvasMoveEvent extends PointerInputEvent {
-  const CanvasMoveEvent({required this.position});
+  const CanvasMoveEvent({required this.position, this.pressure = 1.0});
 
   final Offset position;
+
+  /// Pen/stylus contact pressure in the range 0.0–1.0.
+  /// Always 1.0 for mouse and touch events.
+  final double pressure;
 }
 
 final class CanvasUpEvent extends PointerInputEvent {

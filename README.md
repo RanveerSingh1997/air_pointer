@@ -253,15 +253,19 @@ in progress when long-press fires, `CanvasCancelEvent` is emitted first.
 events (`CanvasDownEvent`/`CanvasMoveEvent`/`CanvasUpEvent`). `TouchInputSource`
 uses direct-manipulation semantics: finger drags pan the canvas, pinch zooms it.
 
+Use `defaultPointerSource()` to pick the right source automatically (see below),
+or wire it manually:
+
 ```dart
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 
 _controller = CanvasInputController(
   sources: [
-    if (Platform.isAndroid || Platform.isIOS)
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS)
       TouchInputSource()      // mobile: pan + pinch
     else
-      MouseInputSource(),     // desktop: drag + scroll
+      MouseInputSource(),     // desktop / web: drag + scroll
     GestureInputSource(),     // hand tracking on web; no-op elsewhere
   ],
 );
@@ -305,6 +309,100 @@ TouchInputSource(
   tapSlop: 10.0,          // max px displacement still treated as a tap
   doubleTapWindow: const Duration(milliseconds: 300),
 )
+```
+
+---
+
+## StylusInputSource (Apple Pencil / S-Pen)
+
+`StylusInputSource` handles `PointerDeviceKind.stylus` and
+`PointerDeviceKind.invertedStylus` (eraser end). It uses the same element-drag
+semantics as `MouseInputSource` and filters out mouse/touch/trackpad events so it
+can be combined with other sources without emitting duplicate events.
+
+```dart
+final _stylus = StylusInputSource();
+
+_controller = CanvasInputController(
+  sources: [
+    _stylus,            // Apple Pencil / S-Pen: drag, tap, hover
+    TouchInputSource(), // finger touch: pan + pinch
+  ],
+);
+
+// Distinguish pen tip from eraser
+_stylus.eraserModeStream.listen((isEraser) {
+  setState(() => _isEraserMode = isEraser);
+});
+```
+
+### Gesture mapping
+
+| Pen contact | Event |
+|---|---|
+| Tap (minimal movement) | `CanvasTapEvent` |
+| Double-tap | `CanvasTapEvent` + `CanvasDoubleTapEvent` |
+| Pen drag | `CanvasDownEvent` → `CanvasMoveEvent` → `CanvasUpEvent` |
+| Hover (proximity) | `CanvasHoverEvent` |
+| OS pointer cancel | `CanvasCancelEvent` |
+
+### Pressure
+
+`CanvasDownEvent.pressure` and `CanvasMoveEvent.pressure` carry the hardware
+value (0.0–1.0). All other input sources emit the default `1.0`.
+
+```dart
+case CanvasMoveEvent(:final position, :final pressure):
+  _brush.draw(position, size: pressure * _maxBrushSize);
+```
+
+### Eraser detection
+
+`StylusInputSource.eraserModeStream` emits `true` when the eraser end contacts
+the screen and `false` when the pen tip is active. It only emits on mode changes,
+not every frame.
+
+### Options
+
+```dart
+StylusInputSource(
+  tapSlop: 8.0,          // max px displacement still treated as a tap (default)
+  doubleTapWindow: const Duration(milliseconds: 300),
+)
+```
+
+---
+
+## defaultPointerSource()
+
+Returns the best-fit `CanvasInputSource` for the current platform without any
+manual platform checks:
+
+```dart
+_controller = CanvasInputController(
+  sources: [defaultPointerSource()],
+);
+```
+
+| Platform | Source returned |
+|---|---|
+| Android, iOS | `TouchInputSource` |
+| Web | `MouseInputSource` |
+| macOS, Windows, Linux | `MouseInputSource` |
+
+Uses `kIsWeb` and `defaultTargetPlatform` from `package:flutter/foundation.dart`
+(not `dart:io`), so it is safe to call on web.
+
+`GestureInputSource` is intentionally not included — add it separately when you
+need air-gesture input:
+
+```dart
+_controller = CanvasInputController(
+  sources: [
+    defaultPointerSource(),
+    GestureInputSource(),   // web: MediaPipe; native: no-op stub
+  ],
+);
 ```
 
 ---
