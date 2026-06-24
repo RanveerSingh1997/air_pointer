@@ -1,3 +1,37 @@
+## 0.2.2 (unreleased)
+
+### Documentation
+
+- **README** — Documented three previously undocumented public API surfaces:
+  `CanvasInputController` muting (`muteWhenActive`/`activeStream`),
+  `GestureInputSource.statusStream` lifecycle states, and
+  `GestureInputSource.setFilterParams()`.
+- **README** — Added self-hosting section documenting `mediaPipeBaseUrl` and
+  `modelAssetUrl` constructor parameters (Flutter Web only); corrected the
+  "no self-hosted model" limitation which was inaccurate — self-hosting has
+  been wired since 0.1.0.
+- **KNOWN_LIMITATIONS** — Corrected "No rotation gesture" bullet: rotation IS
+  emitted by `GestureInputSource` via `CanvasScaleEvent.rotation`; only
+  `MouseInputSource` omits it (Flutter's `ScaleGestureRecognizer` limitation).
+- **CONTRIBUTING** — Fixed wrong directory paths (`lib/src/filters/` →
+  `lib/src/filter/`, removed non-existent `lib/src/calibration/`); added
+  development prerequisites table.
+- **SECURITY** — Replaced GitHub default template with accurate policy for a
+  0.2.x package (correct version table, advisory link, SLA, scope table).
+- **CLAUDE.md** — Added architecture guide for AI-assisted development,
+  covering the js_interop boundary invariant, quality gates, testing philosophy,
+  and breaking-change rules.
+
+### Fixes
+
+- `pubspec.yaml` version bumped from `0.2.0` to `0.2.1` (was incorrectly
+  behind `CHANGELOG.md`); added `homepage` and `issue_tracker` fields.
+- **`GestureInputSource` (native)** — `dispose()` now wraps `_frameSub?.cancel()`
+  in `unawaited()`, consistent with the three `StreamController.close()` calls
+  below it.
+
+---
+
 ## 0.2.1
 
 ### Bug fixes

@@ -376,6 +376,24 @@ logic — it is fully unit-testable without a camera or ML model.
 
 ---
 
+## Self-hosting MediaPipe assets (Flutter Web only)
+
+By default `GestureInputSource` loads the WASM runtime and hand model from CDN.
+For offline or CSP-restricted deployments, self-host both assets:
+
+```dart
+GestureInputSource(
+  mediaPipeBaseUrl: '/mediapipe/',   // serves vision_bundle.js + WASM files
+  modelAssetUrl: '/mediapipe/hand_landmarker.task',
+)
+```
+
+Use `scripts/download_mediapipe.sh` to fetch the pinned versions into
+`example/web/mediapipe/`. Both parameters are **Flutter Web only** — they have
+no effect on native builds and do not exist on `GestureInputSource` native stub.
+
+---
+
 ## Architecture boundary
 
 The strict invariant: **no `NormalizedLandmark`, `HandLandmarker`, `JSObject`,
@@ -398,13 +416,14 @@ boundary — all sources speak the same type.
   conditions. MediaPipe's model is generally robust across skin tones but
   performance may vary. Run calibration if default thresholds are unreliable.
 
-- **No offline/self-hosted model.** The WASM runtime and `.task` model file are
-  loaded from CDN at runtime. Self-hosting is possible by downloading the assets
-  and updating the paths — not yet wired as a package option.
+- **First-run CDN latency without self-hosting.** The WASM runtime (~4 MB) and
+  `.task` model file load from CDN on first page load. Self-host by passing
+  `mediaPipeBaseUrl` and `modelAssetUrl` to `GestureInputSource` (web only —
+  see the self-hosting section below) or using `scripts/download_mediapipe.sh`.
 
 - **First-run CDN latency.** MediaPipe WASM (~4 MB) loads before the first frame
-  is processed. On a cold cache this takes 2–5 seconds. Subsequent page loads use
-  the browser cache.
+  is processed. On a cold cache this takes 2–5 seconds. Use self-hosting (see
+  above) to eliminate the CDN dependency and reduce cold-start time.
 
 - **`CanvasCancelEvent` has no position.** When a hand exits the frame mid-drag,
   the last known position is not re-emitted. Consumers that need a "cancel at
