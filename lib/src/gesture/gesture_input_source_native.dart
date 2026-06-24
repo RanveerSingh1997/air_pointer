@@ -225,7 +225,7 @@ final class GestureInputSource implements CanvasInputSource {
   @override
   void dispose() {
     _recognizer.reset();
-    _frameSub?.cancel();
+    unawaited(_frameSub?.cancel());
     _frameSub = null;
     landmarkProvider?.dispose();
     unawaited(_statusController.close());
