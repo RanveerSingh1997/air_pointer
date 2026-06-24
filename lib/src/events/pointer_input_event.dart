@@ -60,6 +60,7 @@ final class CanvasScrollEvent extends PointerInputEvent {
     required this.position,
     required this.delta,
     this.isTrackpad = false,
+    this.velocity = Offset.zero,
   });
 
   final Offset position;
@@ -69,6 +70,15 @@ final class CanvasScrollEvent extends PointerInputEvent {
   /// pan). The OS already applies momentum scrolling for trackpad events, so
   /// consumers should apply the delta directly rather than adding extra inertia.
   final bool isTrackpad;
+
+  /// Fling velocity in pixels per second, in content-movement coordinates.
+  ///
+  /// Non-zero only on touch fling events emitted by [TouchInputSource] at the
+  /// end of a fast single-finger drag. Positive X = content moving right;
+  /// positive Y = content moving down. Use it to seed a momentum animation —
+  /// [delta] is [Offset.zero] on fling events so only one field is non-zero at
+  /// a time.
+  final Offset velocity;
 }
 
 final class CanvasScaleEvent extends PointerInputEvent {

@@ -1,5 +1,18 @@
 ## 0.2.2 (unreleased)
 
+### New
+
+- **`TouchInputSource`** — mobile-native input source for Android and iOS.
+  Single-finger drag → `CanvasScrollEvent` (direct-manipulation pan); two-finger
+  pinch/spread → `CanvasScaleEvent`; fling → `CanvasScrollEvent` with non-zero
+  `velocity` field for consumer momentum animations. Tap detection uses raw
+  `Listener` events rather than `GestureDetector` so taps are never dropped by
+  `ScaleGestureRecognizer`'s kPanSlop movement threshold.
+- **`CanvasScrollEvent.velocity`** (`Offset`, default `Offset.zero`) — fling
+  velocity field added to `CanvasScrollEvent`. Non-zero only on fling events
+  emitted by `TouchInputSource`. Backwards-compatible: existing code that
+  constructs or pattern-matches `CanvasScrollEvent` compiles unchanged.
+
 ### Documentation
 
 - **README** — Documented three previously undocumented public API surfaces:

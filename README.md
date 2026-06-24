@@ -247,6 +247,68 @@ in progress when long-press fires, `CanvasCancelEvent` is emitted first.
 
 ---
 
+## TouchInputSource (Android / iOS)
+
+`MouseInputSource` works on mobile but maps single-finger drag to element-drag
+events (`CanvasDownEvent`/`CanvasMoveEvent`/`CanvasUpEvent`). `TouchInputSource`
+uses direct-manipulation semantics: finger drags pan the canvas, pinch zooms it.
+
+```dart
+import 'dart:io' show Platform;
+
+_controller = CanvasInputController(
+  sources: [
+    if (Platform.isAndroid || Platform.isIOS)
+      TouchInputSource()      // mobile: pan + pinch
+    else
+      MouseInputSource(),     // desktop: drag + scroll
+    GestureInputSource(),     // hand tracking on web; no-op elsewhere
+  ],
+);
+```
+
+### Gesture mapping
+
+| Touch gesture | Event |
+|---|---|
+| Tap | `CanvasTapEvent` |
+| Double-tap | `CanvasTapEvent` + `CanvasDoubleTapEvent` |
+| Long press | `CanvasLongPressEvent` |
+| Single-finger drag | `CanvasScrollEvent` (pan) |
+| Flick / fling | `CanvasScrollEvent` with `velocity` (seed momentum) |
+| Two-finger pinch or spread | `CanvasScaleEvent` |
+| Two-finger release | `CanvasScaleEndEvent` |
+
+### Delta and velocity conventions
+
+`CanvasScrollEvent.delta` follows the same sign convention as mouse scroll:
+`offset -= delta` pans the canvas in the direction the finger moved.
+
+On fling, `delta` is `Offset.zero` and `velocity` (pixels/second) is non-zero
+in the direction the content should continue moving. Use it to seed a ticker:
+
+```dart
+case CanvasScrollEvent(:final delta, :final velocity, :final isTrackpad):
+  if (velocity != Offset.zero) {
+    _momentum = velocity;
+    _momentumTicker.start();
+  } else {
+    _offset -= delta;
+    setState(() {});
+  }
+```
+
+### Options
+
+```dart
+TouchInputSource(
+  tapSlop: 10.0,          // max px displacement still treated as a tap
+  doubleTapWindow: const Duration(milliseconds: 300),
+)
+```
+
+---
+
 ## Muting a source when another is active
 
 `CanvasInputController` can suppress a source whenever a second source is

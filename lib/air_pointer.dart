@@ -12,3 +12,4 @@ export 'package:air_pointer/src/gesture/hand_tracking_status.dart';
 export 'package:air_pointer/src/gesture/landmark_provider.dart';
 export 'package:air_pointer/src/gesture/recognized_gesture.dart';
 export 'package:air_pointer/src/mouse/mouse_input_source.dart';
+export 'package:air_pointer/src/touch/touch_input_source.dart';
