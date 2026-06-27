@@ -1,6 +1,4 @@
-## 0.2.2 (unreleased)
-
-### New
+## 0.2.2
 
 ### Bug fixes
 
@@ -101,6 +99,15 @@
 - **`GestureInputSource` (native)** — `dispose()` now wraps `_frameSub?.cancel()`
   in `unawaited()`, consistent with the three `StreamController.close()` calls
   below it.
+
+### Example
+
+- **3D Room** — Camera now starts inside the room (dist 900 → 250) for an
+  immersive interior view instead of a dollhouse perspective from outside.
+- **3D Room** — Furniture can now be rotated on its Y-axis: horizontal scroll
+  while a piece is selected rotates it in-place; two-finger twist
+  (`CanvasScaleEvent.rotation`) also rotates the selected piece instead of the
+  camera.
 
 ---
 
