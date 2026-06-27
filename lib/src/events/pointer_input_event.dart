@@ -153,12 +153,23 @@ final class CanvasCancelEvent extends PointerInputEvent {
 /// The event is emitted once per gesture recognition, not every frame.
 /// Consumers can bind app-specific actions to each gesture value.
 final class CanvasGestureEvent extends PointerInputEvent {
-  const CanvasGestureEvent({required this.gesture, this.isSecondHand = false});
+  const CanvasGestureEvent({
+    required this.gesture,
+    this.isSecondHand = false,
+    this.confidence = 1.0,
+  });
 
   final RecognizedGesture gesture;
 
   /// True when the gesture was detected on the secondary (second) hand.
   final bool isSecondHand;
+
+  /// ML confidence of this gesture classification (0.0–1.0).
+  ///
+  /// Always `1.0` on web (rule-based heuristic classifier). On native,
+  /// populated from the [LandmarkProvider]'s gesture confidence score when
+  /// using a model-based backend such as `hand_detection`.
+  final double confidence;
 }
 
 /// Cardinal direction of a [CanvasSwipeEvent].
