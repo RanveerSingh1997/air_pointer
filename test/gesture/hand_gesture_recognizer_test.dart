@@ -620,7 +620,9 @@ void main() {
 
     test('subsequent pointing frames emit CanvasScrollEvent', () {
       final r = scrollR();
-      _run(r, [pointing()]);  // consume first frame (hover)
+      // scrollConfirmFrames=2 (default) + 1 baseline frame = 3 hover frames
+      // before scroll activates.
+      _run(r, [pointing(), pointing(), pointing()]);
       final events = _run(r, List.filled(5, pointing()));
       expect(events.whereType<CanvasScrollEvent>(), hasLength(5));
       expect(events.whereType<CanvasHoverEvent>(), isEmpty);
@@ -658,12 +660,9 @@ void main() {
 
     test('isPointing debug flag is true while pointing', () {
       final r = scrollR();
-      r.process(landmarks: pointing(), dt: _dt, canvasSize: _size); // first frame: baseline
-      final result = r.process(
-        landmarks: pointing(),
-        dt: _dt,
-        canvasSize: _size,
-      );
+      // consume confirm frames + baseline before scroll (and isPointing) go live
+      _run(r, [pointing(), pointing(), pointing()]);
+      final result = r.process(landmarks: pointing(), dt: _dt, canvasSize: _size);
       expect(result.debug.isPointing, isTrue);
     });
 
@@ -704,6 +703,43 @@ void main() {
         canvasSize: _size,
       );
       expect(result.events.first, isA<CanvasHoverEvent>());
+    });
+
+    test('drag release does not immediately trigger scroll (regression)', () {
+      // Sequence: drag → pinch jitter opens → scroll should NOT fire for the
+      // first scrollConfirmFrames frames after releasing the drag.
+      final r = HandGestureRecognizer(scrollEnabled: true);
+      _run(r, [_open(), _open(), _open()]);
+      expect(r.phase, GesturePhase.hovering);
+
+      // Start drag.
+      _run(r, [_pinch()]);
+      expect(r.phase, GesturePhase.down);
+
+      // Drag-release: open hand (simulates pinch distance spiking above threshold).
+      final upEvents = _run(r, [_open()]);
+      expect(upEvents.whereType<CanvasUpEvent>(), hasLength(1));
+      expect(r.phase, GesturePhase.hovering);
+
+      // Immediately switch to pointing gesture (index extended, middle curled) —
+      // this is the failure mode: without the fix, scroll would fire within 2
+      // frames. With scrollConfirmFrames=2, the first two pointing frames must
+      // emit hover only.
+      final afterRelease = _run(r, [pointing(), pointing()]);
+      expect(
+        afterRelease.whereType<CanvasScrollEvent>(),
+        isEmpty,
+        reason: 'scroll must not fire within scrollConfirmFrames frames of drag release',
+      );
+    });
+
+    test('scrollConfirmFrames=1 activates scroll after one confirm + baseline', () {
+      final r = HandGestureRecognizer(scrollEnabled: true, scrollConfirmFrames: 1);
+      _run(r, [_open(), _open(), _open()]);
+      _run(r, [pointing()]);          // confirm frame (count=1 ≥ 1)
+      _run(r, [pointing()]);          // baseline frame
+      final events = _run(r, [pointing()]);
+      expect(events.whereType<CanvasScrollEvent>(), hasLength(1));
     });
   });
 
