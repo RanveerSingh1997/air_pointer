@@ -32,23 +32,49 @@ final class CanvasLongPressEvent extends PointerInputEvent {
 }
 
 final class CanvasDownEvent extends PointerInputEvent {
-  const CanvasDownEvent({required this.position, this.pressure = 1.0});
+  const CanvasDownEvent({
+    required this.position,
+    this.pressure = 1.0,
+    this.tilt = 0.0,
+    this.orientation = 0.0,
+  });
 
   final Offset position;
 
   /// Pen/stylus contact pressure in the range 0.0–1.0.
   /// Always 1.0 for mouse and touch events.
   final double pressure;
+
+  /// Stylus tilt angle in radians from the surface plane (0.0 = flat,
+  /// π/2 = perpendicular). Always 0.0 for mouse and touch events.
+  final double tilt;
+
+  /// Stylus azimuth angle in radians relative to the positive X axis,
+  /// clockwise (0.0 = pointing right). Always 0.0 for mouse and touch events.
+  final double orientation;
 }
 
 final class CanvasMoveEvent extends PointerInputEvent {
-  const CanvasMoveEvent({required this.position, this.pressure = 1.0});
+  const CanvasMoveEvent({
+    required this.position,
+    this.pressure = 1.0,
+    this.tilt = 0.0,
+    this.orientation = 0.0,
+  });
 
   final Offset position;
 
   /// Pen/stylus contact pressure in the range 0.0–1.0.
   /// Always 1.0 for mouse and touch events.
   final double pressure;
+
+  /// Stylus tilt angle in radians from the surface plane (0.0 = flat,
+  /// π/2 = perpendicular). Always 0.0 for mouse and touch events.
+  final double tilt;
+
+  /// Stylus azimuth angle in radians relative to the positive X axis,
+  /// clockwise (0.0 = pointing right). Always 0.0 for mouse and touch events.
+  final double orientation;
 }
 
 final class CanvasUpEvent extends PointerInputEvent {

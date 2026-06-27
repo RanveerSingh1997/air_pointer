@@ -96,6 +96,7 @@ class _TouchSurfaceState extends State<_TouchSurface> {
   // Pinch state (GestureDetector)
   bool _isPinching = false;
   double _pinchLastScale = 1.0;
+  double _pinchLastRotation = 0.0;
   Offset _pinchLastFocalPoint = Offset.zero;
 
   // Scroll state (GestureDetector)
@@ -105,7 +106,11 @@ class _TouchSurfaceState extends State<_TouchSurface> {
   // ScaleGestureRecognizer requires kPanSlop (~36px) of movement to win the
   // arena, which is larger than tapSlop (default 10px). Raw pointer events let
   // us distinguish taps from drags without depending on the arena outcome.
-  bool _tapPending = false;
+  //
+  // Only the first touch finger is tracked for tap detection. Subsequent fingers
+  // (e.g. the second finger of a pinch) must not overwrite _tapPointer so that
+  // lifting finger 2 before finger 1 doesn't misfire a tap.
+  int? _tapPointer; // pointer ID of the finger being tracked for tap
   Offset _pointerDownPosition = Offset.zero;
   bool _scrollEmitted = false; // true once onScaleUpdate fires
   DateTime? _lastTapTime;
@@ -115,25 +120,30 @@ class _TouchSurfaceState extends State<_TouchSurface> {
   // ── Raw pointer events (tap detection) ──────────────────────────────────
 
   void _onPointerDown(flutter_gestures.PointerDownEvent e) {
-    _tapPending = true;
+    if (e.kind != flutter_gestures.PointerDeviceKind.touch) return;
+    if (_tapPointer != null) return; // first finger wins; ignore subsequent
+    _tapPointer = e.pointer;
     _pointerDownPosition = e.localPosition;
     _scrollEmitted = false;
   }
 
   void _onPointerUp(flutter_gestures.PointerUpEvent e) {
-    if (_tapPending && !_isPinching && !_scrollEmitted) {
+    if (e.pointer != _tapPointer) return;
+    if (!_isPinching && !_scrollEmitted) {
       final dist = (e.localPosition - _pointerDownPosition).distance;
       if (dist < widget.tapSlop) {
         _emitTap();
       }
     }
-    _tapPending = false;
+    _tapPointer = null;
     _scrollEmitted = false;
   }
 
   void _onPointerCancel(flutter_gestures.PointerCancelEvent e) {
-    _tapPending = false;
-    _scrollEmitted = false;
+    if (e.pointer == _tapPointer) {
+      _tapPointer = null;
+      _scrollEmitted = false;
+    }
     _isPinching = false;
     _emit(const CanvasCancelEvent());
   }
@@ -157,6 +167,7 @@ class _TouchSurfaceState extends State<_TouchSurface> {
     if (details.pointerCount >= 2) {
       _isPinching = true;
       _pinchLastScale = 1.0;
+      _pinchLastRotation = 0.0;
       _pinchLastFocalPoint = details.localFocalPoint;
       return;
     }
@@ -181,13 +192,16 @@ class _TouchSurfaceState extends State<_TouchSurface> {
     final scaleDelta =
         _pinchLastScale > 0 ? details.scale / _pinchLastScale : 1.0;
     final panDelta = details.localFocalPoint - _pinchLastFocalPoint;
+    final rotationDelta = details.rotation - _pinchLastRotation;
     _pinchLastScale = details.scale;
     _pinchLastFocalPoint = details.localFocalPoint;
+    _pinchLastRotation = details.rotation;
     _emit(
       CanvasScaleEvent(
         focalPoint: details.localFocalPoint,
         scaleDelta: scaleDelta,
         panDelta: panDelta,
+        rotation: rotationDelta,
       ),
     );
   }
@@ -196,6 +210,7 @@ class _TouchSurfaceState extends State<_TouchSurface> {
     if (_isPinching) {
       _isPinching = false;
       _pinchLastScale = 1.0;
+      _pinchLastRotation = 0.0;
       _emit(const CanvasScaleEndEvent());
       return;
     }
@@ -214,7 +229,7 @@ class _TouchSurfaceState extends State<_TouchSurface> {
   }
 
   void _onLongPressStart(LongPressStartDetails details) {
-    _tapPending = false;
+    _tapPointer = null;
     _lastTapTime = null;
     _emit(CanvasLongPressEvent(position: details.localPosition));
   }

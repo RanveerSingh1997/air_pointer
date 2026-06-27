@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:air_pointer/air_pointer.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -263,6 +264,107 @@ void main() {
         expect(scales, isNotEmpty);
         // At least one scale event should show zoom-in (spread)
         expect(scales.any((e) => e.scaleDelta > 1.0), isTrue);
+      });
+
+      testWidgets('rotation gesture produces non-zero rotation field',
+          (tester) async {
+        await tester.pumpWidget(_build(source));
+
+        // Simulate a clockwise rotation: finger above center moves right,
+        // finger below center moves left.
+        final events = await _collect(tester, source, () async {
+          final gesture1 = await tester.startGesture(
+            _kCenter - const Offset(0, 50),
+          );
+          final gesture2 = await tester.startGesture(
+            _kCenter + const Offset(0, 50),
+          );
+          await tester.pump();
+          await gesture1.moveBy(const Offset(40, 0));
+          await gesture2.moveBy(const Offset(-40, 0));
+          await tester.pump();
+          await gesture1.up();
+          await gesture2.up();
+        });
+
+        final scales = events.whereType<CanvasScaleEvent>().toList();
+        expect(scales, isNotEmpty);
+        // Cumulative rotation should be non-zero for a rotational gesture.
+        final totalRotation = scales.fold(0.0, (s, e) => s + e.rotation);
+        expect(totalRotation, isNonZero);
+      });
+    });
+
+    group('non-touch events filtered', () {
+      testWidgets('mouse down does not emit tap or scroll', (tester) async {
+        await tester.pumpWidget(_build(source));
+
+        final collected = <PointerInputEvent>[];
+        final sub = source.events.listen(collected.add);
+        await tester.sendEventToBinding(
+          const PointerDownEvent(
+            pointer: 1,
+            position: _kCenter,
+            kind: PointerDeviceKind.mouse,
+          ),
+        );
+        await tester.sendEventToBinding(
+          const PointerUpEvent(pointer: 1, position: _kCenter),
+        );
+        await tester.pump();
+        unawaited(sub.cancel());
+
+        expect(collected.whereType<CanvasTapEvent>(), isEmpty);
+        expect(collected.whereType<CanvasScrollEvent>(), isEmpty);
+      });
+
+      testWidgets('stylus down does not emit tap', (tester) async {
+        await tester.pumpWidget(_build(source));
+
+        final collected = <PointerInputEvent>[];
+        final sub = source.events.listen(collected.add);
+        await tester.sendEventToBinding(
+          const PointerDownEvent(
+            pointer: 1,
+            position: _kCenter,
+            kind: PointerDeviceKind.stylus,
+          ),
+        );
+        await tester.sendEventToBinding(
+          const PointerUpEvent(pointer: 1, position: _kCenter),
+        );
+        await tester.pump();
+        unawaited(sub.cancel());
+
+        expect(collected.whereType<CanvasTapEvent>(), isEmpty);
+      });
+    });
+
+    group('multi-finger tap guard', () {
+      testWidgets('second finger up does not fire a tap', (tester) async {
+        await tester.pumpWidget(_build(source));
+
+        final collected = <PointerInputEvent>[];
+        final sub = source.events.listen(collected.add);
+
+        const finger2Pos = Offset(450, 300);
+
+        // Finger 1 goes down — becomes the tracked pointer.
+        await tester.sendEventToBinding(
+          const PointerDownEvent(pointer: 1, position: _kCenter),
+        );
+        // Finger 2 goes down — must NOT overwrite the tracked pointer.
+        await tester.sendEventToBinding(
+          const PointerDownEvent(pointer: 2, position: finger2Pos),
+        );
+        // Finger 2 lifts — must NOT fire a tap because it is not the tracked pointer.
+        await tester.sendEventToBinding(
+          const PointerUpEvent(pointer: 2, position: finger2Pos),
+        );
+        await tester.pump();
+        unawaited(sub.cancel());
+
+        expect(collected.whereType<CanvasTapEvent>(), isEmpty);
       });
     });
 

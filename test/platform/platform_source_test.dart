@@ -63,4 +63,46 @@ void main() {
       expect(find.byType(SizedBox), findsOneWidget);
     });
   });
+
+  group('defaultPointerSources', () {
+    test('returns TouchInputSource on Android and iOS', () {
+      for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+        debugDefaultTargetPlatformOverride = platform;
+        final sources = defaultPointerSources();
+        expect(sources, hasLength(1));
+        expect(sources.first, isA<TouchInputSource>());
+        for (final s in sources) {
+          s.dispose();
+        }
+      }
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    test('returns StylusInputSource + MouseInputSource on desktop', () {
+      for (final platform in [
+        TargetPlatform.macOS,
+        TargetPlatform.linux,
+        TargetPlatform.windows,
+        TargetPlatform.fuchsia,
+      ]) {
+        debugDefaultTargetPlatformOverride = platform;
+        final sources = defaultPointerSources();
+        expect(sources, hasLength(2));
+        expect(sources[0], isA<StylusInputSource>());
+        expect(sources[1], isA<MouseInputSource>());
+        for (final s in sources) {
+          s.dispose();
+        }
+      }
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    test('each returned source exposes an events stream', () {
+      final sources = defaultPointerSources();
+      for (final s in sources) {
+        expect(s.events, isA<Stream<PointerInputEvent>>());
+        s.dispose();
+      }
+    });
+  });
 }

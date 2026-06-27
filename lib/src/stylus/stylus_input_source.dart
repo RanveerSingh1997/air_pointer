@@ -130,12 +130,22 @@ class _StylusSurfaceState extends State<_StylusSurface> {
     _updateEraserMode(e.kind);
     _downPosition = e.localPosition;
     _tapPending = true;
-    _emit(CanvasDownEvent(position: e.localPosition, pressure: e.pressure));
+    _emit(CanvasDownEvent(
+      position: e.localPosition,
+      pressure: e.pressure,
+      tilt: e.tilt,
+      orientation: e.orientation,
+    ));
   }
 
   void _onPointerMove(PointerMoveEvent e) {
     if (e.pointer != _activePointer) return;
-    _emit(CanvasMoveEvent(position: e.localPosition, pressure: e.pressure));
+    _emit(CanvasMoveEvent(
+      position: e.localPosition,
+      pressure: e.pressure,
+      tilt: e.tilt,
+      orientation: e.orientation,
+    ));
   }
 
   void _onPointerUp(PointerUpEvent e) {

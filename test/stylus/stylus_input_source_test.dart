@@ -115,6 +115,73 @@ void main() {
         final move = collected.whereType<CanvasMoveEvent>().first;
         expect(move.pressure, closeTo(0.75, 0.01));
       });
+
+      testWidgets('CanvasDownEvent carries tilt and orientation', (tester) async {
+        await tester.pumpWidget(_build(source));
+
+        final collected = <PointerInputEvent>[];
+        final sub = source.events.listen(collected.add);
+
+        await tester.sendEventToBinding(
+          const PointerDownEvent(
+            pointer: 1,
+            position: _kCenter,
+            kind: PointerDeviceKind.stylus,
+            tilt: 0.4,
+            orientation: 1.2,
+          ),
+        );
+        await tester.pump();
+        await tester.sendEventToBinding(
+          const PointerUpEvent(pointer: 1, position: _kCenter),
+        );
+        unawaited(sub.cancel());
+
+        final down = collected.whereType<CanvasDownEvent>().first;
+        expect(down.tilt, closeTo(0.4, 0.01));
+        expect(down.orientation, closeTo(1.2, 0.01));
+      });
+
+      testWidgets('CanvasMoveEvent carries tilt and orientation', (tester) async {
+        await tester.pumpWidget(_build(source));
+
+        final collected = <PointerInputEvent>[];
+        final sub = source.events.listen(collected.add);
+
+        await tester.sendEventToBinding(
+          const PointerDownEvent(
+            pointer: 1,
+            position: _kCenter,
+            kind: PointerDeviceKind.stylus,
+          ),
+        );
+        await tester.sendEventToBinding(
+          const PointerMoveEvent(
+            pointer: 1,
+            position: Offset(450, 300),
+            kind: PointerDeviceKind.stylus,
+            tilt: 0.3,
+            orientation: 0.8,
+          ),
+        );
+        await tester.pump();
+        await tester.sendEventToBinding(
+          const PointerUpEvent(pointer: 1, position: Offset(450, 300)),
+        );
+        unawaited(sub.cancel());
+
+        final move = collected.whereType<CanvasMoveEvent>().first;
+        expect(move.tilt, closeTo(0.3, 0.01));
+        expect(move.orientation, closeTo(0.8, 0.01));
+      });
+
+      testWidgets('non-stylus source emits default tilt=0 orientation=0',
+          (tester) async {
+        // Verify the defaults are 0.0 so consumers don't need null-checks.
+        const event = CanvasDownEvent(position: Offset(100, 100));
+        expect(event.tilt, 0.0);
+        expect(event.orientation, 0.0);
+      });
     });
 
     group('tap detection', () {
