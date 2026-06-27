@@ -26,7 +26,7 @@ class _V3 {
 class _Cam {
   double az = 0.25;    // horizontal orbit angle (radians)
   double el = 0.42;   // vertical orbit angle (radians)
-  double dist = 900.0; // distance from target
+  double dist = 250.0; // distance from target
 
   static const _target = _V3(0, 55, 0);
   static const _fl = 680.0; // focal length (pixels)
@@ -73,7 +73,7 @@ class _Cam {
   void reset() {
     az = 0.25;
     el = 0.42;
-    dist = 900.0;
+    dist = 250.0;
   }
 }
 
@@ -94,7 +94,8 @@ class _Box {
 
   final int id;
   final String label;
-  double cx, cz; // floor-plane centre (XZ)
+  double cx, cz;       // floor-plane centre (XZ)
+  double rotation = 0; // Y-axis rotation (radians)
   final double w, h, d;
   final Color color;
   final bool selectable;
@@ -184,15 +185,20 @@ List<_Face> _buildScene(
     final base = sel ? Color.lerp(b.color, Colors.lightBlueAccent, 0.4)! : b.color;
     final x = b.cx; final z = b.cz;
     final hw = b.w / 2; final hd = b.d / 2; final ht = b.h;
+    final cr = math.cos(b.rotation);
+    final sr = math.sin(b.rotation);
+    // Rotate corner offset (dx, dz) around box centre then lift to height dy.
+    _V3 c(double dx, double dy, double dz) =>
+        _V3(x + dx * cr - dz * sr, dy, z + dx * sr + dz * cr);
 
-    final blf = _V3(x - hw, 0,  z - hd);
-    final brf = _V3(x + hw, 0,  z - hd);
-    final brb = _V3(x + hw, 0,  z + hd);
-    final blb = _V3(x - hw, 0,  z + hd);
-    final tlf = _V3(x - hw, ht, z - hd);
-    final trf = _V3(x + hw, ht, z - hd);
-    final trb = _V3(x + hw, ht, z + hd);
-    final tlb = _V3(x - hw, ht, z + hd);
+    final blf = c(-hw, 0,  -hd);
+    final brf = c( hw, 0,  -hd);
+    final brb = c( hw, 0,   hd);
+    final blb = c(-hw, 0,   hd);
+    final tlf = c(-hw, ht, -hd);
+    final trf = c( hw, ht, -hd);
+    final trb = c( hw, ht,  hd);
+    final tlb = c(-hw, ht,  hd);
 
     // 5 visible faces (skip bottom — hidden by floor)
     quad([tlb, trb, trf, tlf], base, sel ? 1.00 : 0.95); // top
@@ -297,8 +303,8 @@ class _Room3DState extends State<Room3DCanvas> {
   bool _isDown = false;
   bool _showCamera = false;
 
-  // Saved position to restore on cancel
-  double _savedCx = 0, _savedCz = 0;
+  // Saved transform to restore on cancel
+  double _savedCx = 0, _savedCz = 0, _savedRot = 0;
   Offset _prevDragPos = Offset.zero;
 
   final _boxes = <_Box>[
@@ -356,6 +362,7 @@ class _Room3DState extends State<Room3DCanvas> {
               _selectedId = b.id;
               _savedCx = b.cx;
               _savedCz = b.cz;
+              _savedRot = b.rotation;
               break;
             }
           }
@@ -401,6 +408,7 @@ class _Room3DState extends State<Room3DCanvas> {
             final sel = _boxes.firstWhere((b) => b.id == _selectedId);
             sel.cx = _savedCx;
             sel.cz = _savedCz;
+            sel.rotation = _savedRot;
           }
           _selectedId = null;
         });
@@ -409,12 +417,22 @@ class _Room3DState extends State<Room3DCanvas> {
         setState(() => _cursor = position);
 
       case CanvasScrollEvent(:final delta):
-        setState(() => _cam.zoomBy(delta.dy));
+        setState(() {
+          if (_selectedId != null && delta.dx != 0) {
+            _boxes.firstWhere((b) => b.id == _selectedId).rotation +=
+                delta.dx * 0.008;
+          }
+          _cam.zoomBy(delta.dy);
+        });
 
       case CanvasScaleEvent(:final scaleDelta, :final rotation, :final panDelta):
         setState(() {
           _cam.zoomFactor(scaleDelta);
-          _cam.az -= rotation;
+          if (_selectedId != null && rotation != 0) {
+            _boxes.firstWhere((b) => b.id == _selectedId).rotation += rotation;
+          } else {
+            _cam.az -= rotation;
+          }
           _cam.orbit(panDelta.dx * 0.2, panDelta.dy * 0.2);
         });
 
@@ -582,12 +600,13 @@ class _HintsPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Drag empty space  — orbit camera'),
-              Text('Scroll / pinch    — zoom in · out'),
-              Text('Drag furniture    — move piece'),
-              Text('Swipe ← →        — snap 90° view'),
-              Text('Swipe ↑ ↓        — tilt camera'),
-              Text('Double-tap        — reset view'),
+              Text('Drag empty space   — orbit camera'),
+              Text('Scroll / pinch     — zoom in · out'),
+              Text('Drag furniture     — move piece'),
+              Text('H-scroll on piece  — rotate piece'),
+              Text('Swipe ← →         — snap 90° view'),
+              Text('Swipe ↑ ↓         — tilt camera'),
+              Text('Double-tap         — reset view'),
             ],
           ),
         ),
