@@ -44,6 +44,7 @@ final class HandGestureRecognizer {
     this.graceFrames = 5,
     this.deadzonePx = 3.0,
     this.pinchConfirmFrames = 1,
+    this.scrollConfirmFrames = 2,
     double minCutoff = 1.0,
     double beta = 0.05,
     Duration dwellDuration = Duration.zero,
@@ -105,6 +106,14 @@ final class HandGestureRecognizer {
   final int pinchConfirmFrames;
 
   int _pinchConfirmCount = 0;
+
+  /// Consecutive pointing frames required before scroll activates. Default 2
+  /// (~67 ms at 30 fps). Prevents a brief drag→hover→point transition from
+  /// immediately firing [CanvasScrollEvent] and interrupting a drag flow.
+  /// Set to 1 to match the old single-frame baseline-only behaviour.
+  final int scrollConfirmFrames;
+
+  int _scrollConfirmCount = 0;
 
   /// Cursor must stay within this radius (screen pixels) for the dwell timer
   /// to accumulate. Moving beyond it resets the timer to zero.
@@ -264,6 +273,7 @@ final class HandGestureRecognizer {
     _timeSinceLastDwellS = double.infinity;
     _prevScrollPosition = null;
     _isScrollActive = false;
+    _scrollConfirmCount = 0;
     _swipeCooldownS = 0.0;
     _xFilter.reset();
     _yFilter.reset();
@@ -403,10 +413,17 @@ final class HandGestureRecognizer {
         // the post-dwell guard persists across a scroll session.
         _dwellAnchor = position;
         _dwellElapsedS = 0;
+        // Gate: require scrollConfirmFrames consecutive pointing frames before
+        // activating scroll. Prevents a drag→release→briefly-pointing sequence
+        // from immediately firing CanvasScrollEvent.
+        _scrollConfirmCount++;
+        if (_scrollConfirmCount < scrollConfirmFrames) {
+          return [CanvasHoverEvent(position: position)];
+        }
         final prev = _prevScrollPosition;
         _prevScrollPosition = position;
         if (prev == null) {
-          // First pointing frame: record baseline, no delta yet.
+          // First confirmed pointing frame: record baseline, no delta yet.
           return [CanvasHoverEvent(position: position)];
         }
         _isScrollActive = true;
@@ -414,6 +431,7 @@ final class HandGestureRecognizer {
         final scrollDx = (position.dx - prev.dx) * scrollScale;
         return [CanvasScrollEvent(position: position, delta: Offset(scrollDx, scrollDy))];
       }
+      _scrollConfirmCount = 0;
       _prevScrollPosition = null;
       _isScrollActive = false;
       final dwellEvents = _checkDwellEvents(position, dt);
@@ -426,6 +444,7 @@ final class HandGestureRecognizer {
       _prevScrollPosition = null;
       _isScrollActive = false;
       _pinchConfirmCount = 0;
+      _scrollConfirmCount = 0;
     }
 
     // Hysteresis: pinch-close was handled inside the hovering block above.

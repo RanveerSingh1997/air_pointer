@@ -2,6 +2,18 @@
 
 ### New
 
+### Bug fixes
+
+- **Drag-to-scroll interference** — `CanvasScrollEvent` could fire immediately
+  after releasing a drag when the hand briefly adopted a pointing-like shape
+  during the transition. Fixed by adding a `scrollConfirmFrames` gate (default
+  `2`, ~67 ms at 30 fps) that requires N consecutive pointing frames before
+  scroll activates, consistent with the existing `pinchConfirmFrames` guard for
+  drag. Set `scrollConfirmFrames: 1` to restore the old single-frame-baseline
+  behaviour.
+
+### New
+
 - **`handLandmarkConnections`** — exported constant listing the 21 skeleton
   bone pairs for the MediaPipe hand topology. Iterate over it to draw a
   skeleton overlay without hand-coding the connections yourself.
