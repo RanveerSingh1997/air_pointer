@@ -29,6 +29,49 @@ enum HandLandmarkType {
   pinkyTip,   // 20
 }
 
+/// Skeleton connections for the 21-point MediaPipe hand landmark topology.
+///
+/// Each entry is a pair `[start, end]` identifying the two landmarks that form
+/// one bone segment of the hand skeleton. Iterate over this list to draw a
+/// skeleton overlay, e.g.:
+///
+/// ```dart
+/// for (final connection in handLandmarkConnections) {
+///   final start = landmarks.getLandmark(connection[0]);
+///   final end   = landmarks.getLandmark(connection[1]);
+///   canvas.drawLine(Offset(start.x, start.y), Offset(end.x, end.y), paint);
+/// }
+/// ```
+const List<List<HandLandmarkType>> handLandmarkConnections = [
+  // Thumb
+  [HandLandmarkType.wrist,     HandLandmarkType.thumbCmc],
+  [HandLandmarkType.thumbCmc,  HandLandmarkType.thumbMcp],
+  [HandLandmarkType.thumbMcp,  HandLandmarkType.thumbIp],
+  [HandLandmarkType.thumbIp,   HandLandmarkType.thumbTip],
+  // Index finger
+  [HandLandmarkType.wrist,     HandLandmarkType.indexMcp],
+  [HandLandmarkType.indexMcp,  HandLandmarkType.indexPip],
+  [HandLandmarkType.indexPip,  HandLandmarkType.indexDip],
+  [HandLandmarkType.indexDip,  HandLandmarkType.indexTip],
+  // Middle finger
+  [HandLandmarkType.indexMcp,  HandLandmarkType.middleMcp],
+  [HandLandmarkType.middleMcp, HandLandmarkType.middlePip],
+  [HandLandmarkType.middlePip, HandLandmarkType.middleDip],
+  [HandLandmarkType.middleDip, HandLandmarkType.middleTip],
+  // Ring finger
+  [HandLandmarkType.middleMcp, HandLandmarkType.ringMcp],
+  [HandLandmarkType.ringMcp,   HandLandmarkType.ringPip],
+  [HandLandmarkType.ringPip,   HandLandmarkType.ringDip],
+  [HandLandmarkType.ringDip,   HandLandmarkType.ringTip],
+  // Pinky
+  [HandLandmarkType.ringMcp,   HandLandmarkType.pinkyMcp],
+  [HandLandmarkType.pinkyMcp,  HandLandmarkType.pinkyPip],
+  [HandLandmarkType.pinkyPip,  HandLandmarkType.pinkyDip],
+  [HandLandmarkType.pinkyDip,  HandLandmarkType.pinkyTip],
+  // Outer palm edge
+  [HandLandmarkType.wrist,     HandLandmarkType.pinkyMcp],
+];
+
 /// Typed access into a 21-point MediaPipe landmark list.
 extension HandLandmarkList on List<HandLandmarkPoint> {
   /// Returns the landmark at the position corresponding to [type].

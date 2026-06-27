@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:math' as math;
 import 'dart:ui_web' as ui_web;
 
 import 'package:air_pointer/src/boundary/canvas_input_source.dart';
@@ -45,6 +46,9 @@ final class GestureInputSource implements CanvasInputSource {
     Duration longPressDuration = Duration.zero,
     Duration doubleTapWindow = const Duration(milliseconds: 300),
     this.maxHands = 2,
+    this.minHandDetectionConfidence = 0.5,
+    this.minHandPresenceConfidence = 0.5,
+    this.minTrackingConfidence = 0.5,
   }) {
     _recognizer = HandGestureRecognizer(
       pinchCloseThreshold: pinchCloseThreshold,
@@ -83,6 +87,22 @@ final class GestureInputSource implements CanvasInputSource {
   ///
   /// Set to 1 to improve inference speed when two-hand gestures are not needed.
   final int maxHands;
+
+  /// Minimum confidence for the palm-detection model to accept a hand (0–1).
+  /// Default 0.5 (MediaPipe default). Lower to detect hands more eagerly at
+  /// the cost of more false positives; raise to suppress background detections.
+  final double minHandDetectionConfidence;
+
+  /// Minimum confidence for the landmark model to report a hand as present
+  /// between detection frames (0–1). Default 0.5. Lower values keep the
+  /// session alive through brief occlusions; higher values drop faster.
+  final double minHandPresenceConfidence;
+
+  /// Minimum confidence for the tracking model to reuse the previous bounding
+  /// box rather than re-running the detector (0–1). Default 0.5. Lower values
+  /// track more aggressively; higher values re-detect more often (more stable
+  /// but slightly more expensive).
+  final double minTrackingConfidence;
 
   final StreamController<PointerInputEvent> _controller =
       StreamController.broadcast();
@@ -227,6 +247,9 @@ final class GestureInputSource implements CanvasInputSource {
           'wasmFolderUrl': '$base/wasm',
           'modelUrl': modelAssetUrl ?? _kModelUrl,
           'numHands': maxHands,
+          'minHandDetectionConfidence': minHandDetectionConfidence,
+          'minHandPresenceConfidence': minHandPresenceConfidence,
+          'minTrackingConfidence': minTrackingConfidence,
         }.jsify()!,
       );
       // The rAF capture loop starts when the worker posts 'ready'.
@@ -341,8 +364,11 @@ final class GestureInputSource implements CanvasInputSource {
 
         // Convert JS-dartified hand arrays to HandLandmarkPoint lists.
         final handednesses = raw['handednesses'] as List?;
+        final worldHandsRaw = raw['worldHands'] as List?;
         List<HandLandmarkPoint>? lms;
         List<HandLandmarkPoint>? secondLms;
+        List<HandLandmarkPoint> worldLms = const [];
+        List<HandLandmarkPoint> secondWorldLms = const [];
         if (hands != null) {
           List<HandLandmarkPoint> parseHand(List<Object?> raw) =>
               raw.map((pt) {
@@ -357,6 +383,24 @@ final class GestureInputSource implements CanvasInputSource {
           if (hands.isNotEmpty) lms = parseHand(hands[0] as List<Object?>);
           if (hands.length >= 2) {
             secondLms = parseHand(hands[1] as List<Object?>);
+          }
+        }
+        if (worldHandsRaw != null) {
+          List<HandLandmarkPoint> parseWorld(List<Object?> raw) =>
+              raw.map((pt) {
+                final m = pt as Map<Object?, Object?>;
+                return HandLandmarkPoint(
+                  (m['x'] as num).toDouble(),
+                  (m['y'] as num).toDouble(),
+                  (m['z'] as num).toDouble(),
+                  visibility: (m['visibility'] as num?)?.toDouble() ?? 1.0,
+                );
+              }).toList();
+          if (worldHandsRaw.isNotEmpty) {
+            worldLms = parseWorld(worldHandsRaw[0] as List<Object?>);
+          }
+          if (worldHandsRaw.length >= 2) {
+            secondWorldLms = parseWorld(worldHandsRaw[1] as List<Object?>);
           }
         }
 
@@ -402,6 +446,8 @@ final class GestureInputSource implements CanvasInputSource {
             pinchDistance: result.debug.pinchDistance,
             landmarks: result.debug.landmarks,
             secondHandLandmarks: result.debug.secondHandLandmarks,
+            worldLandmarks: worldLms,
+            secondWorldLandmarks: secondWorldLms,
             isTwoHandActive: result.debug.isTwoHandActive,
             handedness: _parseHandedness(handednesses, 0),
             secondHandedness: _parseHandedness(handednesses, 1),
@@ -411,6 +457,8 @@ final class GestureInputSource implements CanvasInputSource {
             isPointing: result.debug.isPointing,
             workerLatencyMs: workerLatencyMs,
             roundTripMs: roundTripMs,
+            boundingBox: _landmarkBounds(lms),
+            secondHandBoundingBox: _landmarkBounds(secondLms),
           ));
         }
 
@@ -436,6 +484,21 @@ final class GestureInputSource implements CanvasInputSource {
       'right' => Handedness.right,
       _ => Handedness.unknown,
     };
+  }
+
+  // Computes the axis-aligned bounding box of a set of landmarks in normalised
+  // [0, 1] image coordinates. Returns null when [lms] is null or empty.
+  static Rect? _landmarkBounds(List<HandLandmarkPoint>? lms) {
+    if (lms == null || lms.isEmpty) return null;
+    double minX = lms[0].x, maxX = lms[0].x;
+    double minY = lms[0].y, maxY = lms[0].y;
+    for (final p in lms) {
+      minX = math.min(minX, p.x);
+      maxX = math.max(maxX, p.x);
+      minY = math.min(minY, p.y);
+      maxY = math.max(maxY, p.y);
+    }
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
   void _captureLoop(JSNumber timestamp) {

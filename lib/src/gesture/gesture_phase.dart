@@ -1,5 +1,6 @@
 import 'package:air_pointer/src/gesture/hand_landmark_point.dart';
 import 'package:air_pointer/src/gesture/recognized_gesture.dart';
+import 'package:flutter/painting.dart';
 
 /// Lifecycle state of the gesture recogniser's hand-tracking session.
 enum GesturePhase {
@@ -34,6 +35,8 @@ final class GestureDebugInfo {
     required this.pinchDistance,
     required this.landmarks,
     this.secondHandLandmarks = const [],
+    this.worldLandmarks = const [],
+    this.secondWorldLandmarks = const [],
     this.isTwoHandActive = false,
     this.handedness = Handedness.unknown,
     this.secondHandedness = Handedness.unknown,
@@ -43,6 +46,8 @@ final class GestureDebugInfo {
     this.isPointing = false,
     this.workerLatencyMs = 0,
     this.roundTripMs = 0,
+    this.boundingBox,
+    this.secondHandBoundingBox,
   });
 
   final GesturePhase phase;
@@ -57,6 +62,14 @@ final class GestureDebugInfo {
   /// The 21 MediaPipe landmarks for the second hand when in two-hand mode,
   /// normalised to [0, 1]. Empty when fewer than two hands are detected.
   final List<HandLandmarkPoint> secondHandLandmarks;
+
+  /// World-space landmarks for the primary hand (metric-scale, hand-centre
+  /// origin). Empty when not provided by the backend.
+  final List<HandLandmarkPoint> worldLandmarks;
+
+  /// World-space landmarks for the second hand. Empty when absent or not
+  /// provided by the backend.
+  final List<HandLandmarkPoint> secondWorldLandmarks;
 
   /// True while a two-hand spread/pinch gesture is active.
   final bool isTwoHandActive;
@@ -98,4 +111,15 @@ final class GestureDebugInfo {
 
   /// Wall-clock round-trip time from sending the frame to receiving results (ms).
   final int roundTripMs;
+
+  /// Axis-aligned bounding box of the primary hand in normalised image
+  /// coordinates [0, 1]. `null` when no hand is detected.
+  ///
+  /// On web, computed from the convex hull of the 21 landmarks. On native,
+  /// sourced from the [LandmarkProvider]'s bounding-box data.
+  final Rect? boundingBox;
+
+  /// Bounding box of the second hand. `null` when fewer than two hands are
+  /// detected.
+  final Rect? secondHandBoundingBox;
 }

@@ -169,7 +169,10 @@ final class GestureInputSource implements CanvasInputSource {
     final gesture = frame.detectedGesture;
     if (gesture != RecognizedGesture.none && gesture != _lastGesture) {
       if (!_controller.isClosed) {
-        _controller.add(CanvasGestureEvent(gesture: gesture));
+        _controller.add(CanvasGestureEvent(
+          gesture: gesture,
+          confidence: frame.gestureConfidence,
+        ));
       }
     }
     _lastGesture = gesture;
@@ -178,9 +181,11 @@ final class GestureInputSource implements CanvasInputSource {
     if (secondGesture != RecognizedGesture.none &&
         secondGesture != _lastSecondGesture) {
       if (!_controller.isClosed) {
-        _controller.add(
-          CanvasGestureEvent(gesture: secondGesture, isSecondHand: true),
-        );
+        _controller.add(CanvasGestureEvent(
+          gesture: secondGesture,
+          isSecondHand: true,
+          confidence: frame.secondHandGestureConfidence,
+        ));
       }
     }
     _lastSecondGesture = secondGesture;
@@ -204,6 +209,8 @@ final class GestureInputSource implements CanvasInputSource {
         pinchDistance: result.debug.pinchDistance,
         landmarks: result.debug.landmarks,
         secondHandLandmarks: result.debug.secondHandLandmarks,
+        worldLandmarks: frame.worldLandmarks,
+        secondWorldLandmarks: frame.secondWorldLandmarks,
         isTwoHandActive: result.debug.isTwoHandActive,
         handedness: frame.handedness,
         secondHandedness: frame.secondHandedness,
@@ -211,6 +218,8 @@ final class GestureInputSource implements CanvasInputSource {
         secondHandGesture: frame.secondHandGesture,
         dwellProgress: result.debug.dwellProgress,
         isPointing: result.debug.isPointing,
+        boundingBox: frame.boundingBox,
+        secondHandBoundingBox: frame.secondHandBoundingBox,
       ));
     }
   }

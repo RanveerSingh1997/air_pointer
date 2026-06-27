@@ -8,10 +8,16 @@ final class HandDetectionFrame {
   const HandDetectionFrame({
     this.landmarks = const [],
     this.secondHandLandmarks = const [],
+    this.worldLandmarks = const [],
+    this.secondWorldLandmarks = const [],
     this.handedness = Handedness.unknown,
     this.secondHandedness = Handedness.unknown,
     this.detectedGesture = RecognizedGesture.none,
     this.secondHandGesture = RecognizedGesture.none,
+    this.gestureConfidence = 1.0,
+    this.secondHandGestureConfidence = 1.0,
+    this.boundingBox,
+    this.secondHandBoundingBox,
   });
 
   /// 21 MediaPipe-convention landmarks for the primary detected hand,
@@ -20,6 +26,18 @@ final class HandDetectionFrame {
 
   /// Landmarks for a second hand. Empty when fewer than two hands are visible.
   final List<HandLandmarkPoint> secondHandLandmarks;
+
+  /// World-space landmarks for the primary hand (metric-scale, hand-centre
+  /// origin). Empty when the backend does not provide them.
+  ///
+  /// Unlike [landmarks] (which are normalised to the image frame), world
+  /// landmarks are in a consistent 3-D coordinate system relative to the hand,
+  /// making them suitable for orientation-invariant gesture classification.
+  final List<HandLandmarkPoint> worldLandmarks;
+
+  /// World-space landmarks for the second hand. Empty when absent or not
+  /// provided by the backend.
+  final List<HandLandmarkPoint> secondWorldLandmarks;
 
   /// Handedness of the primary hand as classified by the model.
   final Handedness handedness;
@@ -35,6 +53,26 @@ final class HandDetectionFrame {
   /// Discrete gesture classified for the second hand.
   /// [RecognizedGesture.none] when fewer than two hands are present.
   final RecognizedGesture secondHandGesture;
+
+  /// ML confidence for [detectedGesture] (0.0–1.0). Defaults to `1.0` when
+  /// the backend does not provide a confidence score.
+  final double gestureConfidence;
+
+  /// ML confidence for [secondHandGesture]. Defaults to `1.0` when the
+  /// backend does not provide a confidence score.
+  final double secondHandGestureConfidence;
+
+  /// Axis-aligned bounding box of the primary hand in normalised image
+  /// coordinates [0, 1]. `null` when no hand is detected or the backend does
+  /// not provide bounding-box data.
+  ///
+  /// On web, computed from the convex hull of the 21 landmarks. On native,
+  /// use the bounding box returned by the ML backend (e.g. `hand_detection`).
+  final Rect? boundingBox;
+
+  /// Bounding box of the second hand. `null` when fewer than two hands are
+  /// detected or the backend does not provide bounding-box data.
+  final Rect? secondHandBoundingBox;
 }
 
 /// Contract for a native hand-detection backend.

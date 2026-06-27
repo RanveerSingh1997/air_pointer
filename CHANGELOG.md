@@ -2,6 +2,36 @@
 
 ### New
 
+- **`handLandmarkConnections`** — exported constant listing the 21 skeleton
+  bone pairs for the MediaPipe hand topology. Iterate over it to draw a
+  skeleton overlay without hand-coding the connections yourself.
+- **`CanvasGestureEvent.confidence`** (`double`, default `1.0`) — ML
+  confidence of the gesture classification. Always `1.0` on web (rule-based
+  heuristic); populated from the backend's score on native when using a
+  model-based `LandmarkProvider` such as `hand_detection`.
+- **`HandDetectionFrame.gestureConfidence`** / **`secondHandGestureConfidence`**
+  (`double`, default `1.0`) — per-gesture confidence fields for native backends
+  to expose ML scores that flow through to `CanvasGestureEvent.confidence`.
+- **`GestureInputSource` confidence thresholds** (web) — three new constructor
+  params `minHandDetectionConfidence`, `minHandPresenceConfidence`, and
+  `minTrackingConfidence` (each default `0.5`, matching MediaPipe defaults).
+  Tune these to trade sensitivity against false positives without modifying the
+  JS worker.
+- **`HandDetectionFrame.worldLandmarks`** / **`secondWorldLandmarks`** —
+  optional world-space landmark lists (metric scale, hand-centre origin) for
+  native backends to expose orientation-invariant landmark data. On web,
+  populated from MediaPipe's `worldLandmarks` result automatically.
+- **`GestureDebugInfo.worldLandmarks`** / **`secondWorldLandmarks`** — world
+  landmarks forwarded through the debug snapshot so overlays and classifiers
+  can consume them.
+- **`HandDetectionFrame.boundingBox`** / **`secondHandBoundingBox`** (`Rect?`)
+  — axis-aligned bounding box of each detected hand in normalised image
+  coordinates. Native backends set this from their ML model's output. On web,
+  computed automatically as the min/max envelope of the 21 image-space
+  landmarks.
+- **`GestureDebugInfo.boundingBox`** / **`secondHandBoundingBox`** (`Rect?`)
+  — bounding box forwarded through the debug snapshot for overlay rendering.
+
 - **`StylusInputSource`** — input source for Apple Pencil, Samsung S-Pen, and
   any `PointerDeviceKind.stylus` / `PointerDeviceKind.invertedStylus` device.
   Maps pen contact to element-drag canvas events (Down/Move/Up, tap, double-tap,
